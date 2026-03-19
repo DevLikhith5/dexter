@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/Button';
 import { GoogleLogo, BoltIcon } from '../components/Icons';
 import { Logo } from '../components/Logo';
+import vectorArt from '../assets/login_page_vector_art.jpg';
 import { useAuth } from '../contexts/AuthContext';
-
 import { useEffect } from 'react';
 
 const SignupPage: React.FC = () => {
@@ -24,7 +24,7 @@ const SignupPage: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50/50 dark:bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
@@ -54,95 +54,134 @@ const SignupPage: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-gray-50/50 dark:bg-background p-4 transition-colors">
-      <div className="w-full max-w-[400px] bg-white dark:bg-card rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 p-8 transition-colors">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-transparent text-primary-foreground rounded-lg flex items-center justify-center mb-4">
-            <Logo className="w-12 h-12" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Create an account</h1>
-          <p className="text-sm text-muted-foreground mt-2">Get started with Dexter today.</p>
-        </div>
-
-        <div className="space-y-4">
-          <button onClick={() => navigate('/dashboard')} className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 h-10 px-4 rounded transition-colors font-medium text-sm">
-            <GoogleLogo className="w-5 h-5" />
-            Sign up with Google
-          </button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-200 dark:border-gray-700" />
+    <div className="flex min-h-screen bg-white dark:bg-background w-full">
+      {/* Left side: Form */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-16 lg:px-24 xl:px-32 py-12 relative z-10 transition-colors">
+        <div className="w-full max-w-[440px] mx-auto space-y-8">
+          <div className="flex flex-col items-start mb-2">
+            <div className="w-12 h-12 bg-primary/10 text-primary dark:bg-primary/20 dark:text-gray-100 rounded-xl flex items-center justify-center mb-6 shadow-sm border border-primary/20">
+              <Logo className="w-8 h-8" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white dark:bg-card px-2 text-muted-foreground">Or continue with</span>
-            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Create an account</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Join Dexter today and elevate your workflow.</p>
           </div>
 
-          <form className="space-y-4" onSubmit={handleSignup}>
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded text-sm text-center">
-                {error}
+          <div className="space-y-5">
+            <button onClick={() => navigate('/dashboard')} className="w-full flex items-center justify-center gap-3 bg-white dark:bg-card border border-gray-200 dark:border-gray-800 shadow-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 h-11 px-4 rounded-lg transition-all font-medium text-sm">
+              <GoogleLogo className="w-5 h-5" />
+              Sign up with Google
+            </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-gray-200 dark:border-gray-800" />
               </div>
-            )}
-            <div className="space-y-1">
-              <label className="text-sm font-medium leading-none" htmlFor="username">
-                Username
-              </label>
-              <input
-                className="flex h-10 w-full rounded border border-input dark:border-gray-700 bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                id="username"
-                placeholder="johndoe"
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white dark:bg-background px-3 text-gray-400 dark:text-gray-500 font-medium">Or continue with</span>
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium leading-none" htmlFor="email">
-                Email
-              </label>
-              <input
-                className="flex h-10 w-full rounded border border-input dark:border-gray-700 bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                id="email"
-                placeholder="m@example.com"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium leading-none" htmlFor="password">
-                Password
-              </label>
-              <input
-                className="flex h-10 w-full rounded border border-input dark:border-gray-700 bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <p className="text-[10px] text-muted-foreground">Must be at least 8 characters long</p>
-            </div>
-            <Button fullWidth type="submit" className="dark:bg-white dark:text-black dark:hover:bg-gray-200" disabled={isLoading}>
-              {isLoading ? 'Creating Account...' : 'Create Account'}
-            </Button>
-          </form>
-        </div>
 
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-primary dark:text-white hover:underline">
-            Log in
-          </Link>
-        </div>
+            <form className="space-y-5" onSubmit={handleSignup}>
+              {error && (
+                <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm text-center font-medium">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300" htmlFor="username">
+                  Username
+                </label>
+                <input
+                  className="flex h-11 w-full rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  id="username"
+                  placeholder="johndoe"
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300" htmlFor="email">
+                  Email
+                </label>
+                <input
+                  className="flex h-11 w-full rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  id="email"
+                  placeholder="m@example.com"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none text-gray-700 dark:text-gray-300" htmlFor="password">
+                  Password
+                </label>
+                <input
+                  className="flex h-11 w-full rounded-lg border border-gray-200 dark:border-gray-800 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5">Must be at least 8 characters long</p>
+              </div>
+              <Button fullWidth type="submit" className="h-11 rounded-lg dark:bg-white dark:text-black dark:hover:bg-gray-100 shadow-sm transition-all mt-6" disabled={isLoading}>
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+              </Button>
+            </form>
+          </div>
 
-        <p className="mt-4 px-4 text-center text-xs text-muted-foreground">
-          By clicking continue, you agree to our <a href="#" className="underline hover:text-foreground">Terms of Service</a> and <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
-        </p>
+          <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            Already have an account?{' '}
+            <Link to="/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
+              Log in
+            </Link>
+          </div>
+
+          <p className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+            By clicking continue, you agree to our <a href="#" className="underline hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms of Service</a> and <a href="#" className="underline hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy Policy</a>.
+          </p>
+        </div>
+      </div>
+
+      {/* Right side: Vector Art Image */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-primary/5 dark:bg-gray-900 items-center justify-center overflow-hidden border-l border-gray-100 dark:border-gray-800">
+        {/* Decorative elements behind image */}
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-primary/10 blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-blue-500/10 dark:bg-blue-500/5 blur-3xl"></div>
+        
+        <div className="relative w-full h-full flex items-center justify-center p-12 z-10 transition-transform duration-700 ease-out hover:scale-[1.02]">
+          <div className="relative w-full max-w-2xl aspect-square flex items-center justify-center">
+            <img 
+              src={vectorArt} 
+              alt="Authentication Vector Art" 
+              className="w-full h-full object-contain drop-shadow-2xl mix-blend-multiply dark:mix-blend-normal rounded-3xl"
+              style={{ filter: 'brightness(0.95) contrast(1.05)' }}
+            />
+          </div>
+        </div>
+        
+        {/* Glassmorphism overlay */}
+        <div className="absolute bottom-12 left-12 right-12 z-20">
+          <div className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/40 dark:border-white/10 p-6 rounded-2xl shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <BoltIcon className="w-6 h-6 text-primary dark:text-primary" />
+              </div>
+              <div>
+                <h3 className="text-gray-900 dark:text-white font-bold text-lg">Supercharge your workflow</h3>
+                <p className="text-gray-700 dark:text-gray-300 mt-1 text-sm leading-relaxed">
+                  Join thousands of users who have transformed the way they work, collaborating in real-time with powerful tools.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

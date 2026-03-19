@@ -1,0 +1,11 @@
+{
+  "python.analysis.extraPaths": [
+    "./graph_rag",
+    "${workspaceFolder}/graph_rag"
+  ],
+  "python.analysis.include": [
+    "graph_rag"
+  ],
+  "python.defaultInterpreterPath": "${workspaceFolder}/graph_rag/.venv/bin/python",
+  "python.analysis.typeCheckingMode": "basic"
+}

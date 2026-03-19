@@ -2,8 +2,7 @@
 import requests
 from bs4 import BeautifulSoup
 from io import BytesIO
-from PyPDF2 import PdfReader
-
+import fitz
 
 def extract_text_from_url(url: str) -> str:
     res = requests.get(url, timeout=15)
@@ -20,7 +19,7 @@ def extract_text_from_pdf(pdf_url: str) -> str:
     res = requests.get(pdf_url, timeout=20)
     res.raise_for_status()
 
-    reader = PdfReader(BytesIO(res.content))
-    pages = [p.extract_text() or "" for p in reader.pages]
+    doc = fitz.open(stream=res.content, filetype="pdf")
+    pages = [page.get_text() for page in doc]
 
     return "\n".join(pages)

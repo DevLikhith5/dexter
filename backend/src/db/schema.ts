@@ -7,19 +7,23 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 100 }).notNull().unique(),
   password: text('password'), // Made nullable for Google Auth users
   googleId: varchar('google_id', { length: 255 }).unique(),
-  refreshToken: text('refresh_token'),
+  avatarUrl: varchar('avatar_url', { length: 255 }), // Google profile picture
+  refreshToken: varchar('refresh_token', { length: 255 }),
+  bio: text('bio'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Documents table
+// Documents / Knowledge Store table
+// Tracks every file/link/topic that a user ingests into the Graph RAG service
 export const documents = pgTable('documents', {
   id: serial('id').primaryKey(),
-  title: varchar('title', { length: 255 }).notNull(),
-  content: text('content').notNull(),
+  title: varchar('title', { length: 255 }).notNull(),        // Human-readable label
+  sourceValue: text('source_value').notNull(),              // Original URL, filename, or topic text
+  type: varchar('type', { length: 20 }).notNull().default('url'), // 'url' | 'pdf' | 'topic'
+  graphId: varchar('graph_id', { length: 255 }).notNull(),  // Graph RAG graph ID
   userId: integer('user_id').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Quizzes table
@@ -44,6 +48,8 @@ export const questions = pgTable('questions', {
   type: varchar('type', { length: 20 }).$type<'mcq' | 'tf' | 'short_answer'>().notNull(), // 'mcq', 'tf', 'short_answer'
   correctAnswer: text('correct_answer').notNull(),
   options: text('options').array(), // For MCQ options
+  explanation: text('explanation'), // AI explanation
+  source: text('source'), // Source material reference
   points: integer('points').default(1),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

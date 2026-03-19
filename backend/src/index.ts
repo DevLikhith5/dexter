@@ -30,6 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 
 import authRoutes from './routes/authRoutes';
 import { graphRagRoutes } from './routes/graphRagRoutes';
+import { statsRoutes } from './routes/statsRoutes';
 
 
 
@@ -40,6 +41,7 @@ app.use('/api/answers', answerRoutes);
 app.use('/api/gateway', apiGatewayRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/graph-rag', graphRagRoutes);
+app.use('/api/stats', statsRoutes);
 
 
 const wss = new WebSocketServer({ server });

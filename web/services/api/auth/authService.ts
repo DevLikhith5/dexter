@@ -66,6 +66,22 @@ class AuthService {
     });
   }
 
+  async updateProfile(data: { username?: string, email?: string, bio?: string }): Promise<{ message: string, user: User }> {
+    return makeRequest<{ message: string, user: User }>('/users/me', {
+      method: 'PUT',
+      body: data,
+      authenticated: true,
+    });
+  }
+
+  async updateAvatar(avatarUrl: string): Promise<{ message: string, user: User }> {
+    return makeRequest<{ message: string, user: User }>('/users/me/avatar', {
+      method: 'POST',
+      body: { avatarUrl },
+      authenticated: true,
+    });
+  }
+
   async isAuthenticated(): Promise<boolean> {
     try {
       // Try to refresh the token if needed

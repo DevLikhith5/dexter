@@ -48,8 +48,8 @@ async function verifyAuth() {
         if (loginRes.status !== 200) {
             throw new Error(`Login failed: ${JSON.stringify(loginData)}`);
         }
-
-        if (loginData.token) {
+        //@ts-ignore
+        if (loginData?.token) {
             console.log('\nSUCCESS: Auth flow verified! Token received.');
         } else {
             throw new Error('Token missing in login response');

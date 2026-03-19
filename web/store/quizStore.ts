@@ -28,13 +28,15 @@ export type FormData = {
         shuffleQuestions: boolean;
         showTeacherNotes: boolean;
         gameMode: 'classic' | 'team' | 'speed';
+        googleSheetId?: string;
     }
 };
 
 interface QuizState {
     step: number;
     sessionId: string;
-    graphIds: string[]; // Store graph IDs from ingestion
+    fileGraphIds: string[];
+    linkGraphIds: string[];
     formData: FormData;
     ingestionStatus: 'idle' | 'loading' | 'success' | 'error';
     isGenerating: boolean;
@@ -44,6 +46,7 @@ interface QuizState {
     updateFormData: (field: keyof FormData, value: any) => void;
     addLink: (url: string) => Promise<void>;
     addFile: (file: File) => Promise<void>;
+    addStoredGraph: (graphId: string, label: string) => void;
     removeLink: (idx: number) => void;
     removeFile: (idx: number) => void;
     generateQuestions: () => Promise<void>;
@@ -55,7 +58,8 @@ interface QuizState {
 export const useQuizStore = create<QuizState>((set, get) => ({
     step: 1,
     sessionId: crypto.randomUUID(),
-    graphIds: [],
+    fileGraphIds: [],
+    linkGraphIds: [],
     ingestionStatus: 'idle',
     isGenerating: false,
     formData: {
@@ -74,7 +78,8 @@ export const useQuizStore = create<QuizState>((set, get) => ({
             showLeaderboard: true,
             shuffleQuestions: true,
             showTeacherNotes: true,
-            gameMode: 'classic'
+            gameMode: 'classic',
+            googleSheetId: ''
         }
     },
 
@@ -89,6 +94,17 @@ export const useQuizStore = create<QuizState>((set, get) => ({
             }
             return { formData: newState };
         }),
+
+    addStoredGraph: (graphId: string, label: string) => {
+        set((state) => ({
+            formData: { 
+                ...state.formData,
+                // Add a virtual entry so users can see it selected
+                links: [...state.formData.links, `[Library] ${label}`]
+            },
+            linkGraphIds: [...state.linkGraphIds, graphId]
+        }));
+    },
 
     addLink: async (url) => {
         set({ ingestionStatus: 'loading' });
@@ -115,7 +131,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
             set((state) => ({
                 formData: { ...state.formData, links: [...state.formData.links, url] },
-                graphIds: [...state.graphIds, newGraphId],
+                linkGraphIds: [...state.linkGraphIds, newGraphId],
                 ingestionStatus: 'success'
             }));
 
@@ -149,7 +165,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ inputType: 'pdf', value: cloudinaryUrl })
+                body: JSON.stringify({ inputType: 'pdf', value: cloudinaryUrl, title: file.name })
             });
 
             if (!res.ok) throw new Error("File ingestion failed");
@@ -164,7 +180,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
             set((state) => ({
                 formData: { ...state.formData, files: [...state.formData.files, fileData] },
-                graphIds: [...state.graphIds, newGraphId],
+                fileGraphIds: [...state.fileGraphIds, newGraphId],
                 ingestionStatus: 'success'
             }));
             setTimeout(() => set({ ingestionStatus: 'idle' }), 2000);
@@ -179,23 +195,27 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     removeLink: (idx) =>
         set((state) => {
             const newLinks = state.formData.links.filter((_, i) => i !== idx);
+            const newLinkGraphIds = state.linkGraphIds.filter((_, i) => i !== idx);
             return {
-                formData: { ...state.formData, links: newLinks }
+                formData: { ...state.formData, links: newLinks },
+                linkGraphIds: newLinkGraphIds
             };
         }),
 
     removeFile: (idx) =>
         set((state) => {
             const newFiles = state.formData.files.filter((_, i) => i !== idx);
+            const newFileGraphIds = state.fileGraphIds.filter((_, i) => i !== idx);
             return {
-                formData: { ...state.formData, files: newFiles }
+                formData: { ...state.formData, files: newFiles },
+                fileGraphIds: newFileGraphIds
             };
         }),
 
     generateQuestions: async () => {
         set({ isGenerating: true });
-        const { graphIds, formData } = get();
-        let targetGraphIds = [...graphIds];
+        const { linkGraphIds, fileGraphIds, formData } = get();
+        let targetGraphIds = [...(linkGraphIds || []), ...(fileGraphIds || [])];
 
         try {
             const { authService } = await import('../services/api/auth/authService');
@@ -214,8 +234,9 @@ export const useQuizStore = create<QuizState>((set, get) => ({
                 });
                 if (res.ok) {
                     const data = await res.json();
+                    // No need to persist topic graph id permanently as topic is not removable via a list, 
+                    // but we can append it to targetGraphIds for this generation.
                     targetGraphIds.push(data.data.graph_id);
-                    set((state) => ({ graphIds: [...state.graphIds, data.data.graph_id] }));
                 }
             }
 
@@ -223,33 +244,39 @@ export const useQuizStore = create<QuizState>((set, get) => ({
                 throw new Error("Please add a file, link, or topic first!");
             }
 
-            // For now, use the LAST graph ID (most recent) or iterate?
-            // Starting with the most recent one for simplicity
-            const activeGraphId = targetGraphIds[targetGraphIds.length - 1];
-
-            const res = await fetch(`${API_BASE_URL}/graph-rag/generate/${activeGraphId}?count=${formData.questionCount}`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` }
+            const mcqsPromises = targetGraphIds.map(async (graphId) => {
+                const countPerGraph = Math.ceil(formData.questionCount / targetGraphIds.length);
+                const res = await fetch(`${API_BASE_URL}/graph-rag/generate/${graphId}?count=${countPerGraph}&difficulty=${formData.difficulty}&type=${formData.questionType}`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error("Generation failed for graph " + graphId);
+                const resData = await res.json();
+                return resData.data.mcqs;
             });
 
-            if (!res.ok) throw new Error("Generation failed");
-            const resData = await res.json();
+            const allMcqsArrays = await Promise.all(mcqsPromises);
+            // Mix questions from different sources
+            const allMcqs = allMcqsArrays.flat()
+                .sort(() => Math.random() - 0.5)
+                .slice(0, formData.questionCount);
 
-            // The API returns { message: ..., data: { mcqs: [] } }
-            const mcqs = resData.data.mcqs;
-
-            const questions: Question[] = mcqs.map((q: any, i: number) => ({
-                id: i + 1,
-                text: q.question,
-                options: q.options.map((opt: string, oid: number) => ({
+            const questions: Question[] = allMcqs.map((q: any, i: number) => {
+                const options = q.options.map((opt: string, oid: number) => ({
                     id: oid + 1,
                     text: opt,
                     isCorrect: opt === q.answer
-                })),
-                answer: q.answer,
-                explanation: q.explanation || "Generated via Graph RAG",
-                source: "Graph Knowledge Base"
-            }));
+                })).sort(() => Math.random() - 0.5); // Shuffle options
+                
+                return {
+                    id: i + 1,
+                    text: q.question,
+                    options,
+                    answer: q.answer,
+                    explanation: q.explanation || "Generated via Graph RAG",
+                    source: "Graph Knowledge Base"
+                };
+            });
 
             set((state) => ({
                 formData: { ...state.formData, questions },
@@ -323,7 +350,8 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     reset: () => set({
         step: 1,
         sessionId: crypto.randomUUID(),
-        graphIds: [],
+        fileGraphIds: [],
+        linkGraphIds: [],
         ingestionStatus: 'idle',
         isGenerating: false,
         formData: {
@@ -342,7 +370,8 @@ export const useQuizStore = create<QuizState>((set, get) => ({
                 showLeaderboard: true,
                 shuffleQuestions: true,
                 showTeacherNotes: true,
-                gameMode: 'classic'
+                gameMode: 'classic',
+                googleSheetId: ''
             }
         }
     })

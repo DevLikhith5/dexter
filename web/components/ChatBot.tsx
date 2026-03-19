@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChatBubbleLeftRightIcon, XMarkIcon, PaperAirplaneIcon } from './Icons';
+import { ChatBubbleLeftRightIcon, XMarkIcon, PaperAirplaneIcon, SparklesIcon } from './Icons';
 import { cn } from '../lib/utils';
 import Button from './Button';
 
@@ -61,32 +61,26 @@ const ChatBot: React.FC = () => {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
                         transition={{ duration: 0.2 }}
-                        className="pointer-events-auto mb-4 w-[350px] md:w-[380px] h-[500px] max-h-[80vh] bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                        className="pointer-events-auto mb-4 w-[350px] md:w-[380px] h-[500px] max-h-[80vh] bg-white dark:bg-[#0A0A0A] backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/50">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/10 bg-[#F4F4F5] dark:bg-white/5">
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                                    <ChatBubbleLeftRightIcon className="w-4 h-4 text-white" />
+                                <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center shadow-md">
+                                    <SparklesIcon className="w-4 h-4 text-white dark:text-black" />
                                 </div>
-                                <div>
-                                    <h3 className="font-bold text-sm text-gray-900 dark:text-white font-heading">Dexter AI</h3>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                        <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">Online</span>
-                                    </div>
-                                </div>
+                                <h3 className="font-bold text-sm text-gray-900 dark:text-white font-heading">Dexter AI</h3>
                             </div>
                             <button
                                 onClick={toggleChat}
-                                className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition-colors text-gray-500 dark:text-gray-400"
+                                className="p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-gray-500 dark:text-gray-400"
                             >
                                 <XMarkIcon className="w-5 h-5" />
                             </button>
                         </div>
 
                         {/* Messages */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide bg-white dark:bg-[#0A0A0A]">
                             {messages.map((msg) => (
                                 <div
                                     key={msg.id}
@@ -99,8 +93,8 @@ const ChatBot: React.FC = () => {
                                         className={cn(
                                             "p-3 rounded-2xl text-sm font-medium shadow-sm",
                                             msg.role === 'user'
-                                                ? "bg-indigo-600 text-white rounded-br-none"
-                                                : "bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-200 rounded-bl-none"
+                                                ? "bg-black dark:bg-white text-white dark:text-black rounded-br-none"
+                                                : "bg-[#F4F4F5] dark:bg-white/10 text-gray-900 dark:text-gray-100 rounded-bl-none"
                                         )}
                                     >
                                         {msg.content}
@@ -114,23 +108,23 @@ const ChatBot: React.FC = () => {
                         </div>
 
                         {/* Input */}
-                        <form onSubmit={handleSendMessage} className="p-3 border-t border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/50">
+                        <form onSubmit={handleSendMessage} className="p-3 border-t border-gray-200 dark:border-white/10 bg-[#F4F4F5] dark:bg-white/5">
                             <div className="relative flex items-center gap-2">
                                 <input
                                     type="text"
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     placeholder="Ask me anything..."
-                                    className="flex-1 bg-gray-100 dark:bg-white/5 border border-transparent focus:border-indigo-500/50 dark:focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900 dark:text-white placeholder:text-gray-500 transition-all font-medium"
+                                    className="flex-1 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 focus:border-black dark:focus:border-white focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 rounded-xl px-4 py-2.5 text-sm outline-none text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 transition-all font-medium"
                                 />
                                 <Button
                                     type="submit"
                                     size="icon"
                                     className={cn(
-                                        "h-10 w-10 rounded-xl shrink-0 transition-all duration-200",
+                                        "h-10 w-10 rounded-xl shrink-0 transition-all duration-200 bg-black dark:bg-white text-white dark:text-black",
                                         inputValue.trim()
-                                            ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
-                                            : "bg-gray-200 dark:bg-white/10 text-gray-400 cursor-not-allowed"
+                                            ? "shadow-lg hover:shadow-xl hover:scale-105"
+                                            : "opacity-50 cursor-not-allowed shadow-none"
                                     )}
                                     disabled={!inputValue.trim()}
                                 >
@@ -146,9 +140,9 @@ const ChatBot: React.FC = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={toggleChat}
-                className="pointer-events-auto group relative flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40 transition-all duration-300 z-50"
+                className="pointer-events-auto group relative flex items-center justify-center w-14 h-14 rounded-full bg-black dark:bg-white text-white dark:text-black shadow-2xl hover:shadow-2xl hover:shadow-black/40 dark:hover:shadow-white/30 transition-all duration-300 z-50"
             >
-                <span className="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ animationDuration: '1.5s' }}></span>
+                <span className="absolute inset-0 rounded-full bg-black/20 dark:bg-white/20 opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300"></span>
                 <AnimatePresence mode='wait'>
                     {isOpen ? (
                         <motion.div
@@ -157,6 +151,7 @@ const ChatBot: React.FC = () => {
                             animate={{ opacity: 1, rotate: 0 }}
                             exit={{ opacity: 0, rotate: 90 }}
                             transition={{ duration: 0.2 }}
+                            className="relative z-10"
                         >
                             <XMarkIcon className="w-7 h-7" />
                         </motion.div>
@@ -167,6 +162,7 @@ const ChatBot: React.FC = () => {
                             animate={{ opacity: 1, rotate: 0 }}
                             exit={{ opacity: 0, rotate: -90 }}
                             transition={{ duration: 0.2 }}
+                            className="relative z-10"
                         >
                             <ChatBubbleLeftRightIcon className="w-7 h-7" />
                         </motion.div>

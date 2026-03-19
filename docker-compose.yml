@@ -24,10 +24,25 @@ services:
     image: redis:7-alpine
     container_name: quiz-platform-redis
     ports:
-      - "6389:6379"  # Changed to port 6380 to avoid conflicts
+      - "6389:6379"
     volumes:
       - redis_data:/data
+
+  # Neo4j for Graph RAG
+  neo4j:
+    image: neo4j:5.15
+    container_name: graph-rag-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
 
 volumes:
   postgres_data:
   redis_data:
+  neo4j_data:
+

@@ -10,6 +10,7 @@ interface AuthContextType {
   googleLogin: (code: string) => Promise<any>;
   register: (username: string, email: string, password: string) => Promise<any>;
   logout: () => void;
+  updateUser: (user: User) => void;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -77,10 +78,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       const response = await authService.googleLogin(code);
-      // Set tokens from the response
+
       authService.setTokens(response.token, response.refreshToken || '');
       setUser(response.user);
-      setIsAuthenticated(true); // Update the auth state
+      console.log("USER FROM GOOLGE LOGIN: ",response)
+      setIsAuthenticated(true); 
       return response;
     } catch (error: any) {
       // Error will be handled by the calling component
@@ -113,6 +115,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsAuthenticated(false); // Update the auth state
   };
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+  };
+
   const value: AuthContextType = {
     user,
     token: () => authService.getValidToken(),
@@ -120,6 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     googleLogin,
     register,
     logout,
+    updateUser,
     isAuthenticated: isAuthenticatedState,
     isLoading
   };

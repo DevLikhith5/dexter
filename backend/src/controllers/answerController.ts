@@ -35,11 +35,20 @@ export const submitAnswer = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid question for this quiz attempt' });
     }
 
+    // Evaluate answer before submission
+    const { APIGatewayService } = await import('../services/apiGatewayService');
+    const evaluationResult = await APIGatewayService.evaluateAnswer(
+      question.content,
+      question.correctAnswer,
+      content
+    );
+    const isCorrect = evaluationResult.isCorrect;
+
     // Submit the answer
     const answer = await QuizAttemptService.submitAnswer(
       { attemptId, questionId, content },
-      question.content,
-      question.correctAnswer
+      isCorrect,
+      isCorrect ? (question.points || 10) : 0
     );
 
     res.status(200).json({

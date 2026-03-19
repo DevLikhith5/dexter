@@ -6,8 +6,7 @@ load_dotenv()
 
 OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
 llm = ChatOpenAI(
-    model="arcee-ai/trinity-large-preview:free",
+    model="gpt-4o-mini",
     temperature=0.3,
-    openai_api_base="https://openrouter.ai/api/v1",
     openai_api_key=OPENAI_API_KEY
 )

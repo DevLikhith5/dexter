@@ -23,6 +23,7 @@ import {
 } from '../components/Icons';
 import { EyeIcon, EyeOffIcon, SparklesIcon } from 'lucide-react';
 import { useQuizStore } from '../store/quizStore';
+import { useAuth } from '../contexts/AuthContext';
 
 // --- Types ---
 type Question = {
@@ -189,13 +190,16 @@ const Step2Resources: React.FC<{
     update: any,
     addLink: (url: string) => Promise<void>,
     addFile: (file: File) => Promise<void>,
+    addStoredGraph: (graphId: string, label: string) => void,
     removeLink: (idx: number) => void,
     removeFile: (idx: number) => void,
     ingestionStatus: string
-}> = ({ data, update, addLink, addFile, removeLink, removeFile, ingestionStatus }) => {
+}> = ({ data, update, addLink, addFile, addStoredGraph, removeLink, removeFile, ingestionStatus }) => {
 
     const [linkInput, setLinkInput] = useState('');
     const [isDragging, setIsDragging] = useState(false);
+    const [storedSources, setStoredSources] = useState<{ id: number; title: string; type: string; graphId: string; sourceValue: string; createdAt: string }[]>([]);
+    const [loadingLibrary, setLoadingLibrary] = useState(false);
 
     const handleAddLink = async () => {
         if (linkInput) {
@@ -210,6 +214,29 @@ const Step2Resources: React.FC<{
     };
 
     const isIngesting = ingestionStatus === 'loading';
+
+    useEffect(() => {
+        const fetchStored = async () => {
+            setLoadingLibrary(true);
+            try {
+                const { authService } = await import('../services/api/auth/authService');
+                const token = await authService.getValidToken();
+                const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+                const res = await fetch(`${apiUrl}/graph-rag/stored`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    setStoredSources(result.data || []);
+                }
+            } catch (e) {
+                console.warn('Could not load knowledge library:', e);
+            } finally {
+                setLoadingLibrary(false);
+            }
+        };
+        fetchStored();
+    }, []);
 
     return (
         <motion.div
@@ -315,6 +342,48 @@ const Step2Resources: React.FC<{
                     </Button>
                 </div>
             </div>
+
+            {/* Knowledge Library Section */}
+            <div className="pt-4 border-t border-gray-100 dark:border-white/5">
+                <div className="flex items-center gap-2 mb-4">
+                    <h4 className="text-sm font-bold text-foreground">From My Library</h4>
+                    <span className="text-xs text-muted-foreground">Re-use previously ingested content</span>
+                </div>
+
+                {loadingLibrary ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        Loading library...
+                    </div>
+                ) : storedSources.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">No saved sources yet. Upload a file or link above to get started.</p>
+                ) : (
+                    <div className="grid gap-2">
+                        {storedSources.map((source) => (
+                            <div key={source.id} className="flex items-center p-3 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl hover:border-primary/30 transition-colors group">
+                                <div className={cn(
+                                    "w-9 h-9 rounded-lg flex items-center justify-center mr-3 shrink-0",
+                                    source.type === 'pdf' ? "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400" :
+                                    source.type === 'topic' ? "bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400" :
+                                    "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                )}>
+                                    {source.type === 'pdf' ? <DocumentTextIcon className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="font-medium text-sm text-foreground truncate">{source.title}</p>
+                                    <p className="text-xs text-muted-foreground">{source.type} · {new Date(source.createdAt).toLocaleDateString()}</p>
+                                </div>
+                                <button
+                                    onClick={() => addStoredGraph(source.graphId, source.title)}
+                                    className="ml-2 px-3 py-1.5 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors shrink-0"
+                                >
+                                    + Use
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </motion.div>
     );
 };
@@ -379,6 +448,7 @@ const Step3Questions: React.FC<{
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
     const [globalRefineInput, setGlobalRefineInput] = useState("");
     const [isRefiningBatch, setIsRefiningBatch] = useState(false);
+    const { token: getAuthToken } = useAuth();
 
     const handleSaveQuestion = (updatedQ: Question) => {
         const updatedQuestions = data.questions.map(q => q.id === updatedQ.id ? updatedQ : q);
@@ -390,13 +460,18 @@ const Step3Questions: React.FC<{
         if (!globalRefineInput) return;
         setIsRefiningBatch(true);
         try {
-            const res = await fetch('http://localhost:8000/refine-batch', {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+            const authToken = await getAuthToken?.();
+            const res = await fetch(`${apiUrl}/graph-rag/refine-batch`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
                 body: JSON.stringify({
                     questions: data.questions,
                     instruction: globalRefineInput
-                })
+                }),
             });
             if (!res.ok) throw new Error("Batch refine failed");
             const resData = await res.json();
@@ -425,7 +500,7 @@ const Step3Questions: React.FC<{
                         <div className="flex flex-wrap gap-2 mt-2 items-center">
                             {/* Topic Tags */}
                             {(data.topic || "General Knowledge").split(',').map((tag, idx) => (
-                                <span key={idx} className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                <span key={idx} className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-primary/10 text-primary border border-primary/20">
                                     {tag.trim()}
                                 </span>
                             ))}
@@ -459,8 +534,8 @@ const Step3Questions: React.FC<{
 
                 {/* Global AI Refine Input (Cleaner, Flat Design) */}
                 <div className="relative group">
-                    <div className="relative bg-[#1e2025] border border-white/10 hover:border-white/20 transition-colors rounded-xl p-1 flex gap-2 items-center shadow-lg shadow-black/20">
-                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0 ml-1">
+                    <div className="relative bg-white dark:bg-[#1e2025] border border-gray-200 dark:border-white/10 hover:border-primary/20 transition-colors rounded-xl p-1 flex gap-2 items-center shadow-lg shadow-black/5 dark:shadow-black/20">
+                        <div className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-white/5 flex items-center justify-center shrink-0 ml-1">
                             {isRefiningBatch ? <BoltIcon className="w-4 h-4 text-primary animate-spin" /> : <SparklesIcon className="w-4 h-4 text-primary" />}
                         </div>
                         <input
@@ -469,14 +544,14 @@ const Step3Questions: React.FC<{
                             onChange={(e) => setGlobalRefineInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleBatchRefine()}
                             placeholder="Magic Refine: e.g. 'Make all questions harder' or 'Focus on edge cases'..."
-                            className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder:text-gray-500 h-10 px-2"
+                            className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/50 h-10 px-2"
                             disabled={isRefiningBatch}
                         />
                         <Button
                             size="sm"
                             onClick={handleBatchRefine}
                             disabled={!globalRefineInput || isRefiningBatch}
-                            className="bg-white/5 hover:bg-white/10 text-white border-transparent rounded-lg h-8 px-3 text-xs font-medium transition-all hover:scale-105 active:scale-95"
+                            className="bg-primary/10 hover:bg-primary/20 text-primary border-transparent rounded-lg h-8 px-3 text-xs font-medium transition-all hover:scale-105 active:scale-95"
                         >
                             {isRefiningBatch ? "Refining..." : "Apply"}
                         </Button>
@@ -492,7 +567,7 @@ const Step3Questions: React.FC<{
                             placeholder="Search in questions..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-[#1e2025] dark:bg-[#1e2025] border border-white/5 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-300 placeholder:text-gray-600 focus:ring-1 focus:ring-gray-600 outline-none"
+                            className="w-full bg-white dark:bg-[#1e2025] border border-gray-200 dark:border-white/5 rounded-lg pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/50 outline-none"
                         />
                     </div>
                 </div>
@@ -503,17 +578,17 @@ const Step3Questions: React.FC<{
                 {data.questions
                     .filter(q => q.text.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map((q, qIdx) => (
-                        <div key={q.id} className="bg-[#1e2025] rounded-xl p-5 border border-white/5 relative group hover:border-white/10 transition-colors">
+                        <div key={q.id} className="bg-white dark:bg-[#1e2025] rounded-xl p-5 border border-gray-200 dark:border-white/5 relative group hover:border-primary/20 transition-all shadow-sm dark:shadow-none">
 
-                            <p className="font-medium text-sm text-gray-200 mb-6 pr-4 leading-relaxed">
+                            <p className="font-medium text-sm text-foreground mb-6 pr-4 leading-relaxed">
                                 {q.text}
                             </p>
 
                             <div className="space-y-2 mb-4">
                                 {q.options.map((opt, idx) => (
                                     <div key={opt.id} className="flex items-start gap-3">
-                                        <span className="text-xs font-bold text-gray-500 mt-0.5">{String.fromCharCode(65 + idx)}</span>
-                                        <span className={cn("text-sm", opt.isCorrect ? "text-gray-300 font-medium" : "text-gray-500")}>
+                                        <span className="text-xs font-bold text-muted-foreground mt-0.5">{String.fromCharCode(65 + idx)}</span>
+                                        <span className={cn("text-sm transition-colors", opt.isCorrect ? "text-primary font-bold" : "text-muted-foreground")}>
                                             {opt.text}
                                         </span>
                                     </div>
@@ -522,12 +597,12 @@ const Step3Questions: React.FC<{
 
                             {/* Explanation / Teacher's Note (CONDITIONAL) */}
                             {(q.explanation && data.settings.showTeacherNotes) && (
-                                <div className="mt-4 pt-4 border-t border-white/5">
+                                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/5">
                                     <div className="flex items-center gap-2 mb-1.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500/50" />
-                                        <span className="text-[10px] uppercase tracking-wider font-bold text-yellow-500/80">Teacher's Note</span>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                                        <span className="text-[10px] uppercase tracking-wider font-bold text-yellow-600 dark:text-yellow-500/80">Teacher's Note</span>
                                     </div>
-                                    <p className="text-xs text-gray-400 italic leading-relaxed">
+                                    <p className="text-xs text-muted-foreground dark:text-gray-400 italic leading-relaxed">
                                         "{q.explanation}"
                                     </p>
                                 </div>
@@ -571,14 +646,14 @@ const Step3Questions: React.FC<{
 
                             {/* Actions Overlay/Bottom */}
                             <div className="absolute bottom-4 right-4 flex gap-2">
-                                <button className="w-6 h-6 rounded-md bg-[#2a2c33] flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+                                <button className="w-7 h-7 rounded-md bg-gray-100 dark:bg-[#2a2c33] flex items-center justify-center text-muted-foreground hover:text-primary transition-colors border border-gray-200 dark:border-transparent">
                                     <CheckIcon className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                     onClick={() => setEditingQuestion(q)}
-                                    className="w-6 h-6 rounded-md bg-[#2a2c33] flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                                    className="w-7 h-7 rounded-md bg-gray-100 dark:bg-[#2a2c33] flex items-center justify-center text-muted-foreground hover:text-primary transition-colors border border-gray-200 dark:border-transparent"
                                 >
-                                    <PencilIcon className="w-3.5 h-3.5" />
+                                    <PencilIcon className="w-4 h-4 px-0.5" />
                                 </button>
                             </div>
                         </div>
@@ -794,6 +869,20 @@ const Step4Settings: React.FC<{ data: FormData, update: any }> = ({ data, update
                         )} />
                     </div>
                 </div>
+                
+                <div className="pt-4 border-t border-gray-100 dark:border-white/5">
+                    <div>
+                        <p className="font-medium text-foreground">Google Sheet Sync</p>
+                        <p className="text-xs text-muted-foreground mb-2">Provide a Google Sheet ID to explicitly sync scores.</p>
+                        <input
+                            type="text"
+                            placeholder="Enter Google Sheet ID (Optional)"
+                            value={data.settings.googleSheetId || ''}
+                            onChange={(e) => update('settings', { ...data.settings, googleSheetId: e.target.value })}
+                            className="w-full bg-gray-50 dark:bg-[#1a1c20] border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-mono"
+                        />
+                    </div>
+                </div>
             </div>
         </div>
     </motion.div>
@@ -804,7 +893,7 @@ const CreateQuizPage = () => {
     const navigate = useNavigate();
     const {
         step, sessionId, formData, ingestionStatus, isGenerating,
-        setStep, updateFormData, addLink, addFile, removeLink, removeFile, generateQuestions, updateQuestions, saveQuiz
+        setStep, updateFormData, addLink, addFile, addStoredGraph, removeLink, removeFile, generateQuestions, updateQuestions, saveQuiz
     } = useQuizStore();
 
     const nextStep = () => {
@@ -868,7 +957,7 @@ const CreateQuizPage = () => {
                             ) : (
                                 <>
                                     {step === 1 && <Step1Details key="step1" data={formData} update={updateFormData} />}
-                                    {step === 2 && <Step2Resources key="step2" data={formData} update={updateFormData} addLink={addLink} addFile={addFile} removeLink={removeLink} removeFile={removeFile} ingestionStatus={ingestionStatus} />}
+                                    {step === 2 && <Step2Resources key="step2" data={formData} update={updateFormData} addLink={addLink} addFile={addFile} addStoredGraph={addStoredGraph} removeLink={removeLink} removeFile={removeFile} ingestionStatus={ingestionStatus} />}
                                     {step === 3 && <Step3Questions key="step3" data={formData} update={updateFormData} onNext={nextStep} onRegenerate={generateQuestions} />}
                                     {step === 4 && <Step4Settings key="step4" data={formData} update={updateFormData} />}
                                 </>
@@ -907,6 +996,13 @@ const CreateQuizPage = () => {
                                 }]);
                             }}>
                                 + Add Question
+                            </Button>
+                            <Button variant="ghost" className="text-muted-foreground hover:text-white" onClick={() => {
+                                const shuffled = [...formData.questions].sort(() => Math.random() - 0.5);
+                                updateFormData('questions', shuffled);
+                            }}>
+                                <SparklesIcon className="w-4 h-4 mr-2" />
+                                Shuffle
                             </Button>
                         </div>
 

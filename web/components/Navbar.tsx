@@ -4,10 +4,12 @@ import Button from './Button';
 import { SunIcon, MoonIcon } from './Icons';
 import { Logo } from './Logo';
 import { useTheme } from './ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Menu, MenuItem, HoveredLink, ProductItem } from './ui/navbar-menu';
 import { cn } from '../lib/utils';
 
 const Navbar: React.FC = () => {
+  const { user } = useAuth();
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
   const { theme, toggleTheme } = useTheme();
@@ -37,7 +39,7 @@ const Navbar: React.FC = () => {
           <span className="font-heading text-2xl tracking-tight">Dexter</span>
         </Link>
 
-        {!isAuthPage && (
+        {!isAuthPage && !user && (
           <div className="hidden md:flex items-center justify-center absolute left-0 right-0 top-0 h-16 pointer-events-none">
              <div className="pointer-events-auto mt-2">
                <Menu setActive={setActive}>
@@ -102,6 +104,10 @@ const Navbar: React.FC = () => {
           {isAuthPage ? (
             <Link to="/">
                <Button variant="ghost" size="sm">Back to Home</Button>
+            </Link>
+          ) : user ? (
+            <Link to="/dashboard">
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-foreground font-medium">Dashboard</Button>
             </Link>
           ) : (
             <>

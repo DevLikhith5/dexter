@@ -7,7 +7,7 @@ export class RedisQuizService {
       id: sessionId,
       quizId: quizId.toString(),
       hostUserId,
-      currentQuestionIndex: '0',
+      currentQuestionIndex: '-1',
       participantCount: '0',
       isActive: 'false',
       startTime: new Date().toISOString(),
@@ -37,11 +37,13 @@ export class RedisQuizService {
     return score ? parseInt(score) : 0;
   }
 
-  static async getAllScores(sessionId: string): Promise<{ userId: string; score: number }[]> {
+  static async getAllScores(sessionId: string): Promise<{ userId: string; score: number; userName?: string }[]> {
     const scores = await redisClient.hGetAll(`quiz_scores:${sessionId}`);
+    const names = await redisClient.hGetAll(`quiz_names:${sessionId}`);
     return Object.entries(scores).map(([userId, score]) => ({
       userId,
-      score: parseInt(score)
+      score: parseInt(score),
+      userName: names[userId]
     })).sort((a, b) => b.score - a.score); // Sort by score descending
   }
 
@@ -58,6 +60,11 @@ export class RedisQuizService {
   static async getCurrentQuestion(sessionId: string): Promise<number> {
     const index = await redisClient.hGet(`quiz_session:${sessionId}`, 'currentQuestionIndex');
     return index ? parseInt(index) : 0;
+  }
+
+  // Player management
+  static async setPlayerName(sessionId: string, userId: string, userName: string): Promise<void> {
+    await redisClient.hSet(`quiz_names:${sessionId}`, userId, userName);
   }
 
   // Player management
@@ -78,5 +85,6 @@ export class RedisQuizService {
     await redisClient.del(`quiz_session:${sessionId}`);
     await redisClient.del(`quiz_scores:${sessionId}`);
     await redisClient.del(`quiz_players:${sessionId}`);
+    await redisClient.del(`quiz_names:${sessionId}`);
   }
 }

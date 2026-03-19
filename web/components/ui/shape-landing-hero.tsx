@@ -1,9 +1,8 @@
 import { motion } from "framer-motion";
-import { Circle } from "lucide-react";
 import React from "react";
 import { cn } from "../../lib/utils";
 
-function ElegantShape({
+export function ElegantShape({
     className,
     delay = 0,
     width = 400,
@@ -71,13 +70,11 @@ function ElegantShape({
 }
 
 export function HeroGeometric({
-    badge = "Design Collective",
     title1 = "Elevate Your Digital Vision",
     title2 = "Crafting Exceptional Websites",
     description = "Crafting exceptional digital experiences through innovative design and cutting-edge technology.",
     children
 }: {
-    badge?: string;
     title1?: string;
     title2?: string;
     description?: string;
@@ -154,19 +151,6 @@ export function HeroGeometric({
                         variants={fadeUpVariants}
                         initial="hidden"
                         animate="visible"
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] mb-8 md:mb-12"
-                    >
-                        <Circle className="h-2 w-2 fill-rose-500/80 text-rose-500" />
-                        <span className="text-sm text-black/60 dark:text-white/60 tracking-wide">
-                            {badge}
-                        </span>
-                    </motion.div>
-
-                    <motion.div
-                        custom={1}
-                        variants={fadeUpVariants}
-                        initial="hidden"
-                        animate="visible"
                     >
                         <h1 className="text-4xl sm:text-6xl md:text-8xl font-bold mb-6 md:mb-8 tracking-tight">
                             <span className="bg-clip-text text-transparent bg-gradient-to-b from-black to-black/80 dark:from-white dark:to-white/80">
@@ -184,7 +168,7 @@ export function HeroGeometric({
                     </motion.div>
 
                     <motion.div
-                        custom={2}
+                        custom={1}
                         variants={fadeUpVariants}
                         initial="hidden"
                         animate="visible"
@@ -195,7 +179,7 @@ export function HeroGeometric({
                     </motion.div>
 
                     <motion.div
-                        custom={3}
+                        custom={2}
                         variants={fadeUpVariants}
                         initial="hidden"
                         animate="visible"

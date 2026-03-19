@@ -1,5 +1,6 @@
-import type { Quiz } from '../services/quizService';
+import { QuizService, type Quiz } from '../services/quizService';
 import { RedisQuizService } from '../services/redisQuizService';
+import { GraphRagService } from '../services/graphRagService';
 
 export interface Document {
   title: string;
@@ -40,7 +41,18 @@ export class APIGatewayService {
     correctAnswer: string,
     userAnswer: string
   ): Promise<{ isCorrect: boolean; explanation?: string }> {
-    throw new Error('AI Service is currently disabled.');
+    // Normalization logic: lower case, trim, remove non-alphanumeric at ends if possible, etc.
+    const normalize = (s: string) => s.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").replace(/\s\s+/g, ' ');
+    
+    const normUser = normalize(userAnswer);
+    const normCorrect = normalize(correctAnswer);
+
+    const isCorrect = normUser === normCorrect;
+    
+    return {
+      isCorrect,
+      explanation: isCorrect ? "Correct answer!" : `The correct answer was: ${correctAnswer}`
+    };
   }
 
   /**
@@ -53,7 +65,35 @@ export class APIGatewayService {
     document: Document,
     numQuestions: number = 5
   ): Promise<Quiz> {
-    throw new Error('AI Service is currently disabled.');
+    try {
+      // 1. Ingest document
+      const ingestRes = await GraphRagService.ingestData('text', document.content);
+      
+      // 2. Generate questions from graph
+      const genRes = await GraphRagService.generateQuestions(ingestRes.graph_id, numQuestions);
+
+      // 3. Format into CreateQuizInput
+      const questions = genRes.mcqs.map((mcq) => ({
+        content: mcq.question,
+        type: 'mcq' as const,
+        correctAnswer: mcq.answer,
+        options: mcq.options,
+        points: 1
+      }));
+
+      // 4. Save to db
+      const newQuiz = await QuizService.createQuiz({
+        title,
+        description,
+        userId,
+        questions
+      });
+
+      return newQuiz;
+    } catch (e) {
+      console.error("AI Gateway generation failed", e);
+      throw new Error("Failed to generate quiz using AI");
+    }
   }
 
   /**

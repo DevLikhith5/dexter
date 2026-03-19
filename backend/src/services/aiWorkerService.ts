@@ -38,22 +38,8 @@ export class AIWorkerService {
   }
 
   static async evaluateAnswer(question: string, correctAnswer: string, userAnswer: string): Promise<boolean> {
-    try {
-      const response = await axios.post(`${PYTHON_WORKER_URL}/evaluate-answer`, {
-        question,
-        correctAnswer,
-        userAnswer
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      return response.data.isCorrect;
-    } catch (error) {
-      console.error('Error evaluating answer:', error);
-      throw new Error('Failed to evaluate answer');
-    }
+    // Basic exact match for now
+    return userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim();
   }
 
   static async processDocument(document: Document): Promise<void> {

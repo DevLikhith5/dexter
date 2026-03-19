@@ -5,13 +5,18 @@ import { db } from '../db';
 import { questions, quizzes } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { APIGatewayService } from '../services/apiGatewayService';
+import { GoogleSheetsService } from '../services/googleSheetsService';
 
 interface QuizSession {
   id: string;
+  hostUserId?: string;
+  hostWs?: WebSocket;
   participants: WebSocket[];
   currentQuestionIndex: number;
   scores: Map<string, number>;
   startTime?: Date;
+  submittedAnswers: Set<string>;
+  timerTimeout?: NodeJS.Timeout;
 }
 
 
@@ -66,8 +71,8 @@ const handleMessage = async (ws: WebSocket, message: any) => {
   }
 };
 
-const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; userId: string }) => {
-  const { sessionId, userId } = payload;
+const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; userId: string; userName?: string }) => {
+  const { sessionId, userId, userName } = payload;
 
   try {
     // Validate session ID format
@@ -93,10 +98,12 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
         // Session exists in Redis, load it to memory
         session = {
           id: sessionId,
+          hostUserId: sessionData.hostUserId,
           participants: [ws], // Will be updated as other participants connect
           currentQuestionIndex: parseInt(sessionData.currentQuestionIndex ?? '-1'),
           scores: new Map<string, number>(),
           startTime: sessionData.startTime ? new Date(sessionData.startTime) : undefined,
+          submittedAnswers: new Set<string>(),
         };
 
         // Load scores from Redis
@@ -119,29 +126,31 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
       session.participants.push(ws);
     }
 
-    // Add player to session in Redis
-    await RedisQuizService.addPlayerToSession(sessionId, userId);
+    // Check if user is host
+    let isHost = false;
+    if (session.hostUserId === userId) {
+      isHost = true;
+      session.hostWs = ws;
+    }
 
-    // Initialize user score in memory and Redis
-    session.scores.set(userId, 0);
-    await RedisQuizService.updatePlayerScore(sessionId, userId, 0);
+    if (!isHost) {
+      // Add player to session in Redis only if not host
+      await RedisQuizService.addPlayerToSession(sessionId, userId);
+      if (userName) {
+        await RedisQuizService.setPlayerName(sessionId, userId, userName);
+      }
 
-    // Update participant count in Redis
+      // Initialize user score in memory and Redis if not exists
+      if (!session.scores.has(userId)) {
+        session.scores.set(userId, 0);
+        await RedisQuizService.updatePlayerScore(sessionId, userId, 0);
+      }
+    }
+    
+    // Update participant count in Redis (players only)
     const players = await RedisQuizService.getPlayersInSession(sessionId);
     const participantCount = players.length;
     await RedisQuizService.updateParticipantCount(sessionId, participantCount);
-
-    // Check if user is host
-    let isHost = false;
-    const sessionDataForHostCheck = await RedisQuizService.getQuizSession(sessionId);
-    if (sessionDataForHostCheck && sessionDataForHostCheck.quizId) {
-      // We need to fetch the quiz to check ownership. import quizService or use db
-      // Using db directly as we imported schema
-      const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, parseInt(sessionDataForHostCheck.quizId)));
-      if (quiz && quiz.userId === parseInt(userId)) {
-        isHost = true;
-      }
-    }
 
     let currentQuestionPayload = null;
     if (session.currentQuestionIndex >= 0) {
@@ -214,6 +223,15 @@ const handleAnswerSubmission = async (ws: WebSocket, payload: { sessionId: strin
       return;
     }
 
+    // Deduplicate answers
+    const session = activeSessions.get(sessionId);
+    if (!session) return;
+    const answerKey = `${userId}:${questionId}`;
+    if (session.submittedAnswers.has(answerKey)) {
+      return;
+    }
+    session.submittedAnswers.add(answerKey);
+
     const question = questionResult;
 
     // Evaluate the answer using the AI worker
@@ -226,7 +244,6 @@ const handleAnswerSubmission = async (ws: WebSocket, payload: { sessionId: strin
     const isCorrect = evaluationResult.isCorrect;
 
     // Update the score in memory and Redis
-    const session = activeSessions.get(sessionId);
     let newScore = 0;
     if (isCorrect) {
       // Award points based on the question's point value
@@ -272,8 +289,8 @@ const handleAnswerSubmission = async (ws: WebSocket, payload: { sessionId: strin
 
     await quizAttemptService.QuizAttemptService.submitAnswer(
       { attemptId, questionId, content: answer },
-      question.content,
-      question.correctAnswer
+      isCorrect,
+      isCorrect ? (question.points || 10) : 0
     );
 
     // Send acknowledgment back to the user who submitted the answer
@@ -309,32 +326,37 @@ const startQuiz = async (sessionId: string) => {
   try {
     session.startTime = new Date();
 
-    // Update in Redis
+
     await RedisQuizService.setQuizActive(sessionId, true);
 
-    // Get the quiz ID from the session data
+
     const sessionData = await RedisQuizService.getQuizSession(sessionId);
     if (!sessionData) {
       console.error('Session data not found in Redis:', sessionId);
-      // Notify participants of error
+
       session.participants.forEach(ws => {
         ws.send(JSON.stringify({
           type: 'error',
           payload: { message: 'Session data not found' }
         }));
       });
-      return;
+      return; 
     }
 
     const quizId = parseInt(sessionData.quizId || '0');
 
-    // Get questions for this quiz from the database
+
     const quizService = await import('../services/quizService');
-    const questions = await quizService.QuizService.getQuestionsForQuiz(quizId);
+    let questions = await quizService.QuizService.getQuestionsForQuiz(quizId);
+
+    const quiz = await quizService.QuizService.getQuizById(quizId);
+    if (quiz?.settings?.shuffleQuestions) {
+      questions = questions.sort(() => Math.random() - 0.5);
+    }
 
     if (questions.length === 0) {
       console.error('No questions found for quiz:', quizId);
-      // Notify participants of error
+
       session.participants.forEach(ws => {
         ws.send(JSON.stringify({
           type: 'error',
@@ -344,13 +366,10 @@ const startQuiz = async (sessionId: string) => {
       return;
     }
 
-    // Store questions in Redis for quick access during the quiz
+
     await redisClient.set(`quiz_questions:${sessionId}`, JSON.stringify(questions));
 
-    // Shuffle questions if needed (based on quiz settings)
-    // For now, we'll just use the order from the database
 
-    // Broadcast to all participants that quiz has started
     session.participants.forEach(ws => {
       ws.send(JSON.stringify({
         type: 'quiz_started',
@@ -363,11 +382,11 @@ const startQuiz = async (sessionId: string) => {
       }));
     });
 
-    // Automatically trigger the first question
+
     await nextQuestion(sessionId);
   } catch (error) {
     console.error('Error in startQuiz:', error);
-    // Notify participants of error
+
     session.participants.forEach(ws => {
       ws.send(JSON.stringify({
         type: 'error',
@@ -387,10 +406,13 @@ const nextQuestion = async (sessionId: string) => {
   try {
     session.currentQuestionIndex++;
 
-    // Update in Redis
+
     await RedisQuizService.setCurrentQuestion(sessionId, session.currentQuestionIndex);
 
-    // Get the current question from Redis
+    if (session.timerTimeout) {
+      clearTimeout(session.timerTimeout);
+    }
+
     const questionsStr = await redisClient.get(`quiz_questions:${sessionId}`);
     if (!questionsStr) {
       console.error('Questions not found in Redis for session:', sessionId);
@@ -406,7 +428,7 @@ const nextQuestion = async (sessionId: string) => {
     const questions = JSON.parse(questionsStr);
     const currentQuestion = questions[session.currentQuestionIndex];
     if (!currentQuestion) {
-      // No more questions, quiz is finished
+
       session.participants.forEach(ws => {
         ws.send(JSON.stringify({
           type: 'quiz_finished',
@@ -416,10 +438,36 @@ const nextQuestion = async (sessionId: string) => {
           }
         }));
       });
+
+      const sessionData = await RedisQuizService.getQuizSession(sessionId);
+      if (sessionData && sessionData.quizId) {
+        const quizService = await import('../services/quizService');
+        await quizService.QuizService.endQuiz(parseInt(sessionData.quizId));
+
+        const quiz = await quizService.QuizService.getQuizById(parseInt(sessionData.quizId));
+        const googleSheetId = quiz?.settings?.googleSheetId;
+
+        if (googleSheetId && session.hostUserId) {
+          const scores = await RedisQuizService.getAllScores(sessionId);
+
+          GoogleSheetsService.syncQuizScores(
+            parseInt(sessionData.quizId),
+            quiz?.title || 'Unknown Quiz',
+            sessionId,
+            parseInt(session.hostUserId),
+            googleSheetId,
+            scores
+          ).catch(e => {
+            console.error('Failed background Google Sheets sync:', e.message);
+            console.error('Sheet ID:', googleSheetId);
+            console.error('Error details:', e);
+          });
+        }
+      }
       return;
     }
 
-    // Broadcast the current question to all participants
+
     session.participants.forEach(ws => {
       ws.send(JSON.stringify({
         type: 'next_question',
@@ -437,6 +485,17 @@ const nextQuestion = async (sessionId: string) => {
         }
       }));
     });
+
+    
+    const sessionData = await RedisQuizService.getQuizSession(sessionId);
+    if (sessionData && sessionData.quizId) {
+      const quizService = await import('../services/quizService');
+      const quiz = await quizService.QuizService.getQuizById(parseInt(sessionData.quizId));
+      const timerBase = quiz?.settings?.timerPerQuestion || 30; 
+      session.timerTimeout = setTimeout(() => {
+        nextQuestion(sessionId);
+      }, (timerBase + 5) * 1000); 
+    }
   } catch (error) {
     console.error('Error in nextQuestion:', error);
     session.participants.forEach(ws => {
@@ -452,10 +511,10 @@ const broadcastScoresUpdate = async (sessionId: string) => {
   const session = activeSessions.get(sessionId);
   if (!session) return;
 
-  // Get scores from Redis to ensure we have the most up-to-date values
+
   const scores = await RedisQuizService.getAllScores(sessionId);
 
-  // Broadcast to all participants
+
   session.participants.forEach(ws => {
     ws.send(JSON.stringify({
       type: 'scores_update',
@@ -469,32 +528,30 @@ const broadcastScoresUpdate = async (sessionId: string) => {
 };
 
 const handleDisconnection = async (ws: WebSocket) => {
-  // Get the session ID for this WebSocket connection
+
   const sessionId = activeConnections.get(ws);
   if (!sessionId) {
-    return; // Connection wasn't associated with a session
+    return; 
   }
 
-  // Remove from active connections
+
   activeConnections.delete(ws);
 
-  // Find and remove the disconnected client from the session
+
   const session = activeSessions.get(sessionId);
   if (session) {
     const index = session.participants.indexOf(ws);
     if (index !== -1) {
       session.participants.splice(index, 1);
 
-      // Update participant count in Redis
       const players = await RedisQuizService.getPlayersInSession(sessionId);
       const participantCount = players.length;
       await RedisQuizService.updateParticipantCount(sessionId, participantCount);
 
-      // If session is empty, remove it from memory (but keep in Redis for potential later access)
       if (session.participants.length === 0) {
         activeSessions.delete(sessionId);
       } else {
-        // Notify remaining participants about the disconnection
+
         broadcastToOthers(ws, session, {
           type: 'participant_left',
           payload: {
@@ -506,19 +563,18 @@ const handleDisconnection = async (ws: WebSocket) => {
   }
 };
 
-// Add a new handler for explicit leave requests
+
 const handleLeaveQuiz = async (ws: WebSocket, payload: { sessionId: string; userId: string }) => {
   const { sessionId, userId } = payload;
 
-  // Remove player from session in Redis
+
   await RedisQuizService.removePlayerFromSession(sessionId, userId);
 
-  // Update participant count in Redis
+
   const players = await RedisQuizService.getPlayersInSession(sessionId);
   const participantCount = players.length;
   await RedisQuizService.updateParticipantCount(sessionId, participantCount);
 
-  // Notify remaining participants about the disconnection
   const session = activeSessions.get(sessionId);
   if (session) {
     broadcastToOthers(ws, session, {
@@ -530,10 +586,10 @@ const handleLeaveQuiz = async (ws: WebSocket, payload: { sessionId: string; user
     });
   }
 
-  // Remove from active connections
+
   activeConnections.delete(ws);
 
-  // Close the WebSocket connection
+
   ws.close();
 };
 

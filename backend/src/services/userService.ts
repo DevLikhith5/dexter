@@ -7,7 +7,11 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  password: string;
+  password: string | null;
+  googleId: string | null;
+  avatarUrl: string | null;
+  bio?: string | null;
+  refreshToken: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,5 +65,30 @@ export class UserService {
       .update(users)
       .set({ updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  static async updateRefreshToken(userId: number, refreshToken: string | null): Promise<void> {
+    await db
+      .update(users)
+      .set({ refreshToken, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
+  static async updateProfile(userId: number, updates: { username?: string; email?: string; bio?: string }): Promise<User | undefined> {
+    const [updatedUser] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updatedUser;
+  }
+
+  static async updateAvatar(userId: number, avatarUrl: string): Promise<User | undefined> {
+    const [updatedUser] = await db
+      .update(users)
+      .set({ avatarUrl, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updatedUser;
   }
 }

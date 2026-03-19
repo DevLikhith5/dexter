@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { quizzes, questions, quizAttempts, answers } from '../db/schema';
-import { eq, desc, and, gte } from 'drizzle-orm';
+import { quizzes, questions, quizAttempts, answers, users } from '../db/schema';
+import { eq, desc, and, gte, ilike, inArray, count } from 'drizzle-orm';
 import { AIWorkerService } from './aiWorkerService';
 
 export interface Quiz {
@@ -22,6 +22,8 @@ export interface Question {
   type: 'mcq' | 'tf' | 'short_answer';
   correctAnswer: string;
   options: string[] | null;
+  explanation: string | null;
+  source: string | null;
   points: number | null;
   createdAt: Date;
 }
@@ -31,6 +33,7 @@ export interface CreateQuizInput {
   description?: string;
   userId: number;
   maxParticipants?: number;
+  graphId?: string;
   questions: {
     content: string;
     type: 'mcq' | 'tf' | 'short_answer';
@@ -63,7 +66,8 @@ export class QuizService {
           description: quizData.description,
           userId: quizData.userId,
           maxParticipants: quizData.maxParticipants || 10,
-          settings: quizData.settings
+          settings: quizData.settings,
+          graphId: quizData.graphId
         })
         .returning();
 
@@ -81,12 +85,8 @@ export class QuizService {
             correctAnswer: q.correctAnswer,
             options: q.options,
             points: q.points || 1,
-            // We might need to handle explanation/source if schema allows, 
-            // but currently schema only has basic fields.
-            // For now, these might be lost if not added to schema,
-            // but the prompt didn't ask to migrate 'questions' table yet.
-            // Assuming sufficient for MVP or stored in 'content' if needed?
-            // Actually, let's just insert what we have in schema.
+            explanation: q.explanation,
+            source: q.source
           });
         }
       }
@@ -111,25 +111,143 @@ export class QuizService {
       description: result.description ?? null,
       isActive: result.isActive ?? null,
       maxParticipants: result.maxParticipants ?? null,
-      settings: result.settings ?? null
+      settings: result.settings ?? null,
     };
   }
 
-  static async getUserQuizzes(userId: number): Promise<Quiz[]> {
-    const results = await db
+  static async getUserQuizzes(
+    userId: number,
+    options?: { limit?: number; offset?: number; search?: string; isActive?: boolean }
+  ): Promise<Quiz[]> {
+    const conditions = [eq(quizzes.userId, userId)];
+    
+    if (options?.search) {
+      conditions.push(ilike(quizzes.title, `%${options.search}%`));
+    }
+    
+    if (options?.isActive !== undefined) {
+      conditions.push(eq(quizzes.isActive, options.isActive));
+    }
+
+    let query = db
       .select()
       .from(quizzes)
-      .where(eq(quizzes.userId, userId))
-      .orderBy(desc(quizzes.createdAt));
+      .where(and(...conditions))
+      .orderBy(desc(quizzes.createdAt))
+      .$dynamic();
+
+    if (options?.limit) query = query.limit(options.limit);
+    if (options?.offset) query = query.offset(options.offset);
+
+    const results = await query;
+    const quizIds = results.map(q => q.id);
+
+    let attemptCounts: Record<number, number> = {};
+    if (quizIds.length > 0) {
+      const counts = await db
+        .select({
+          quizId: quizAttempts.quizId,
+          count: count(quizAttempts.id)
+        })
+        .from(quizAttempts)
+        .where(inArray(quizAttempts.quizId, quizIds))
+        .groupBy(quizAttempts.quizId);
+
+      for (const row of counts) {
+        attemptCounts[row.quizId] = Number(row.count) || 0;
+      }
+    }
 
     // Ensure all required fields have proper values
-    return results.map(quiz => ({
+    return results.map((quiz: any) => ({
       ...quiz,
       description: quiz.description ?? null,
       isActive: quiz.isActive ?? null,
       maxParticipants: quiz.maxParticipants ?? null,
-      settings: quiz.settings ?? null
+      settings: quiz.settings ?? null,
+      attemptCount: attemptCounts[quiz.id] || 0
     }));
+  }
+
+  static async getParticipatedQuizzes(userId: number): Promise<any[]> {
+    const results = await db
+      .select({
+        quiz: quizzes,
+        attemptId: quizAttempts.id,
+        score: quizAttempts.score,
+        totalScore: quizAttempts.totalScore,
+        completedAt: quizAttempts.completedAt,
+        attemptedAt: quizAttempts.createdAt
+      })
+      .from(quizAttempts)
+      .innerJoin(quizzes, eq(quizAttempts.quizId, quizzes.id))
+      .where(eq(quizAttempts.userId, userId))
+      .orderBy(desc(quizAttempts.createdAt));
+
+    return results.map(row => ({
+      ...row.quiz,
+      description: row.quiz.description ?? null,
+      isActive: row.quiz.isActive ?? null,
+      maxParticipants: row.quiz.maxParticipants ?? null,
+      settings: row.quiz.settings ?? null,
+      attempt: {
+        id: row.attemptId,
+        score: row.score,
+        totalScore: row.totalScore,
+        completedAt: row.completedAt,
+        createdAt: row.attemptedAt
+      }
+    }));
+  }
+
+  static async getQuizResults(quizId: number): Promise<any[]> {
+    const results = await db
+      .select({
+        userId: users.id,
+        userName: users.username,
+        score: quizAttempts.score,
+        totalScore: quizAttempts.totalScore,
+        completedAt: quizAttempts.completedAt,
+      })
+      .from(quizAttempts)
+      .innerJoin(users, eq(quizAttempts.userId, users.id))
+      .where(eq(quizAttempts.quizId, quizId))
+      .orderBy(desc(quizAttempts.score), desc(quizAttempts.completedAt));
+
+    return results;
+  }
+
+  static async updateQuiz(quizId: number, userId: number, updates: Partial<CreateQuizInput>): Promise<Quiz> {
+    const [updatedQuiz] = await db
+      .update(quizzes)
+      .set({
+        title: updates.title,
+        description: updates.description,
+        maxParticipants: updates.maxParticipants,
+        settings: updates.settings,
+        updatedAt: new Date()
+      })
+      .where(and(eq(quizzes.id, quizId), eq(quizzes.userId, userId)))
+      .returning();
+      
+    if (!updatedQuiz) throw new Error("Quiz not found or unauthorized");
+
+    return {
+      ...updatedQuiz,
+      description: updatedQuiz.description ?? null,
+      isActive: updatedQuiz.isActive ?? null,
+      maxParticipants: updatedQuiz.maxParticipants ?? null,
+      settings: updatedQuiz.settings ?? null
+    } as Quiz;
+  }
+
+  static async deleteQuiz(quizId: number, userId: number): Promise<void> {
+    const [deletedQuiz] = await db
+      .delete(quizzes)
+      .where(and(eq(quizzes.id, quizId), eq(quizzes.userId, userId)))
+      .returning();
+      
+    if (!deletedQuiz) throw new Error("Quiz not found or unauthorized");
   }
 
   static async addQuestionToQuiz(questionData: CreateQuestionInput): Promise<Question> {
@@ -162,6 +280,8 @@ export class QuizService {
     return results.map(question => ({
       ...question,
       options: question.options ?? null,
+      explanation: question.explanation ?? null,
+      source: question.source ?? null,
       points: question.points ?? null
     }));
   }
@@ -209,9 +329,8 @@ export class QuizService {
   }
 
   static async endQuiz(quizId: number): Promise<void> {
-    await db
-      .update(quizzes)
-      .set({ isActive: false })
-      .where(eq(quizzes.id, quizId));
+    // Keep the quiz as active/published even when a session ends
+    // so it doesn't disappear from the Published tab.
+    console.log(`[DEBUG] Session ended for quiz ${quizId}. Keeping it published.`);
   }
 }

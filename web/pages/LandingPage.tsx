@@ -310,7 +310,6 @@ const LandingPage: React.FC = () => {
     <div className="flex flex-col min-h-screen bg-gradient-to-b from-white from-30% via-indigo-50/30 via-60% to-white dark:from-black dark:from-30% dark:via-[#08080a] dark:via-60% dark:to-black transition-colors duration-300">
       {/* Hero Section */}
       <HeroGeometric
-        badge="Dexter AI"
         title1="Turn content into"
         title2="Interactive Quizzes"
         description="Upload PDFs, PPTs, or web links. We generate the questions. You host the live session. Instant grading, real-time leaderboards, and seamless sync."

@@ -12,6 +12,7 @@ import QuizRoomPage from './pages/QuizRoomPage';
 import HostQuizPage from './pages/HostQuizPage';
 import { ThemeProvider } from './components/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 
 const ScrollToTop = () => {
@@ -25,23 +26,24 @@ const ScrollToTop = () => {
 const AppContent: React.FC = () => {
   const location = useLocation();
   const isDashboard = location.pathname.startsWith('/dashboard');
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-300">
-      {!isDashboard && <Navbar />}
+      {!isDashboard && !isAuthPage && <Navbar />}
       <main className={isDashboard ? "h-screen overflow-hidden" : "flex-grow"}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route path="/join" element={<JoinQuizPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/dashboard/host" element={<HostQuizPage />} />
-          <Route path="/dashboard/*" element={<DashboardPage />} />
-          <Route path="/dashboard/quiz/:sessionId" element={<QuizRoomPage />} />
+          <Route path="/join" element={<ProtectedRoute><JoinQuizPage /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/dashboard/host" element={<ProtectedRoute><HostQuizPage /></ProtectedRoute>} />
+          <Route path="/dashboard/*" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/dashboard/quiz/:sessionId" element={<ProtectedRoute><QuizRoomPage /></ProtectedRoute>} />
         </Routes>
       </main>
-      {!isDashboard && <Footer />}
+      {!isDashboard && !isAuthPage && <Footer />}
     </div>
   );
 };

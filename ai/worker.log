@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/cvlikhith/Dexter/ai/app/rabbitmq_worker.py", line 3, in <module>
-    import aio_pika
-ModuleNotFoundError: No module named 'aio_pika'

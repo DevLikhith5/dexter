@@ -17,7 +17,7 @@ def not_easy(question, options):
         print("[FILTER FAIL] Question too short")
         return False
 
-    # Relaxed option length variance
+
     lens = [len(o.split()) for o in options]
     if max(lens) - min(lens) > 10:
         print("[FILTER FAIL] Option length variance too high:", lens)
@@ -90,13 +90,25 @@ def get_overlap_texts(chunk_id, graph_id, limit=3):
 
 # ------------------ LLM Agents ------------------
 
-def question_agent(chunk_text):
-    print("\n[DEBUG] Generating question from chunk")
+def question_agent(chunk_text, difficulty="medium", q_type="mcq"):
+    print(f"\n[DEBUG] Generating {difficulty} {q_type} question from chunk")
     print("Chunk preview:", chunk_text[:200], "...")
 
+    type_instruction = "MCQ question with 4 options"
+    if q_type == "true_false":
+        type_instruction = "True/False question (The answer must be exactly 'True' or 'False')"
+    elif q_type == "mixed":
+        type_instruction = "MCQ or True/False question"
+
+    difficulty_instruction = "HARD exam-level. Avoid definitions. Ask about limitations, implications, or conditions."
+    if difficulty == "easy":
+        difficulty_instruction = "EASY fundamental level. Focus on basic definitions and clear facts."
+    elif difficulty == "medium":
+        difficulty_instruction = "MEDIUM level. Test conceptual understanding and application."
+
     prompt = f"""
-Create ONE HARD exam-level MCQ question from the text below.
-Avoid definitions. Ask about limitation, implication, or condition.
+Create ONE {type_instruction} from the text below.
+Difficulty level: {difficulty_instruction}
 
 TEXT:
 {chunk_text}
@@ -153,8 +165,8 @@ Return ONLY the option text.
 
 # ------------------ Main Generator ------------------
 
-def generate_mcqs(graph_id, limit=10):
-    print("\n[DEBUG] Starting MCQ generation")
+def generate_mcqs(graph_id, limit=10, difficulty="medium", q_type="mcq"):
+    print(f"\n[DEBUG] Starting {difficulty} {q_type} generation")
     mcqs = []
 
     chunks = fetch_chunks(graph_id)
@@ -170,25 +182,32 @@ def generate_mcqs(graph_id, limit=10):
             print(f"[DEBUG] Attempt {attempt+1}/{MAX_TRIES_PER_CHUNK}")
 
             try:
-                question, answer = question_agent(chunk["text"])
+                question, answer = question_agent(chunk["text"], difficulty, q_type)
 
-                overlaps = get_overlap_texts(
-                    chunk["id"],
-                    graph_id,
-                    limit=3
-                )
+                # If True/False, we don't need overlaps for options
+                is_tf_answer = answer.lower() in ["true", "false"] or "true" in answer.lower() or "false" in answer.lower()
+                if q_type == "true_false" or (q_type == "mixed" and is_tf_answer):
+                    options = ["True", "False"]
+                    answer = "True" if "true" in answer.lower() else "False"
+                else:
+                    overlaps = get_overlap_texts(
+                        chunk["id"],
+                        graph_id,
+                        limit=3
+                    )
 
-                if not overlaps:
-                    print("[DEBUG] Using fallback overlaps")
-                    overlaps = [chunk["text"]] * 3
+                    if not overlaps:
+                        print("[DEBUG] Using fallback overlaps")
+                        overlaps = [chunk["text"]] * 3
 
-                options = option_agent(question, answer, overlaps)
+                    options = option_agent(question, answer, overlaps)
 
-                if len(options) < 4:
+                if len(options) < 2:
                     continue
 
-                if not not_easy(question, options):
-                    continue
+                if difficulty == "hard" and q_type == "mcq":
+                    if not not_easy(question, options):
+                        continue
 
                 mcqs.append({
                     "graph_id": graph_id,
@@ -208,3 +227,76 @@ def generate_mcqs(graph_id, limit=10):
     print("[DEBUG] Total MCQs generated:", len(mcqs))
     return mcqs
 
+
+def refine_questions(questions: list, instruction: str):
+    print("\n[DEBUG] Refining batch of questions")
+    print(f"Instruction: {instruction}")
+    
+    refined_questions = []
+    
+    for q in questions:
+        prompt = f"""
+Refine the following MCQ based on the Instruction.
+
+MCQ:
+Question: {q.get('text', q.get('question'))}
+Options: {', '.join([o['text'] for o in q.get('options', [])])}
+
+Instruction:
+{instruction}
+
+Return strictly the refined MCQ in this format:
+Question: <new question text>
+Options: <opt1>, <opt2>, <opt3>, <opt4>
+Correct: <exact text of the correct option>
+Explanation: <brief explanation>
+"""
+        try:
+            resp = llm.invoke(prompt).content.strip()
+            
+            # Simple parser
+            lines = resp.split('\n')
+            new_q = q.get('text', q.get('question'))
+            new_opts = [o['text'] for o in q.get('options', [])]
+            new_correct = ""
+            new_explanation = q.get('explanation', "")
+            
+            for line in lines:
+                if line.startswith("Question:"):
+                    new_q = line.replace("Question:", "").strip()
+                elif line.startswith("Options:"):
+                    new_opts = [o.strip() for o in line.replace("Options:", "").split(',')]
+                elif line.startswith("Correct:"):
+                    new_correct = line.replace("Correct:", "").strip()
+                elif line.startswith("Explanation:"):
+                    new_explanation = line.replace("Explanation:", "").strip()
+            
+            # Normalize new_correct to match one of the options exactly if AI was slightly off
+            actual_correct = ""
+            new_correct_str = str(new_correct).lower()
+            for opt in new_opts:
+                opt_str = str(opt).lower()
+                if opt_str in new_correct_str or new_correct_str in opt_str:
+                    actual_correct = opt
+                    break
+            if not actual_correct and new_opts:
+                actual_correct = new_opts[0] # Fallback if no match
+            
+            # Reconstruct the question object
+            refined_q = {
+                **q,
+                "text": new_q,
+                "question": new_q,
+                "answer": actual_correct,
+                "options": [
+                    {"id": i, "text": opt, "isCorrect": opt == actual_correct}
+                    for i, opt in enumerate(new_opts)
+                ],
+                "explanation": new_explanation
+            }
+            refined_questions.append(refined_q)
+        except Exception as e:
+            print(f"[ERROR] Failed to refine question: {e}")
+            refined_questions.append(q)
+            
+    return refined_questions

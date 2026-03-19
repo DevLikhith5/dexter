@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { quizAttempts, answers } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { AIWorkerService } from './aiWorkerService';
+// removed AIWorkerService
 
 export interface QuizAttempt {
   id: number;
@@ -52,22 +52,7 @@ export class QuizAttemptService {
     };
   }
 
-  static async submitAnswer(answerData: SubmitAnswerInput, questionContent: string, correctAnswer: string): Promise<Answer> {
-    // Evaluate the answer using AI worker
-    const isCorrect = await AIWorkerService.evaluateAnswer(
-      questionContent,
-      correctAnswer,
-      answerData.content
-    );
-
-    // Calculate points based on correctness
-    let pointsAwarded = 0;
-    if (isCorrect) {
-      // We'll need to fetch the question to get its point value
-      // For now, assuming 1 point for incorrect and full points for correct
-      // In a real implementation, we'd fetch the question to get its point value
-      pointsAwarded = 1; // This would be the actual question points
-    }
+  static async submitAnswer(answerData: SubmitAnswerInput, isCorrect: boolean, pointsAwarded: number): Promise<Answer> {
 
     const [newAnswer] = await db
       .insert(answers)

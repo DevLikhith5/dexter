@@ -32,7 +32,7 @@ export const googleLogin = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Invalid Google token' });
         }
 
-        const { email, sub: googleId, name } = payload;
+        const { email, sub: googleId, name, picture } = payload;
 
         const [existingUser] = await db.select().from(users).where(eq(users.email, email));
 
@@ -43,6 +43,7 @@ export const googleLogin = async (req: Request, res: Response) => {
             await db.update(users)
                 .set({
                     googleId: googleId,
+                    avatarUrl: picture || existingUser.avatarUrl,
                     refreshToken: tokens.refresh_token || existingUser.refreshToken,
                 })
                 .where(eq(users.id, existingUser.id));
@@ -57,6 +58,7 @@ export const googleLogin = async (req: Request, res: Response) => {
                 username: username || 'user_' + Date.now(),
                 password: null,
                 googleId: googleId || null,
+                avatarUrl: picture || null,
                 refreshToken: tokens.refresh_token || null,
             }).returning();
 
@@ -81,7 +83,8 @@ export const googleLogin = async (req: Request, res: Response) => {
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                googleId: user.googleId
+                googleId: user.googleId,
+                avatarUrl: user.avatarUrl
             },
         });
 

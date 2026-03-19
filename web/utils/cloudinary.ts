@@ -9,28 +9,38 @@ export async function uploadToCloudinary(file: File): Promise<string> {
     formData.append('file', file);
     formData.append('upload_preset', uploadPreset);
 
-    try {
-        const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`,
-        {
-            method: "POST",
-            body: formData,
+    let lastError: any;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const response = await fetch(
+            `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+            {
+                method: "POST",
+                body: formData,
+            }
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Upload failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.secure_url;
+
+        } catch (error) {
+            console.warn(`Cloudinary upload attempt ${attempt} failed:`, error);
+            lastError = error;
+            if (attempt < 3) {
+                // Wait briefly before retrying
+                await new Promise(r => setTimeout(r, 1000 * attempt));
+            }
         }
-        );
-
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error?.message || `Upload failed with status ${response.status}`);
-        }
-
-        const data = await response.json();
-        
-        return data.secure_url;
-    } catch (error) {
-        console.error('Cloudinary upload error:', error);
-        throw error instanceof Error 
-            ? error 
-            : new Error('Failed to upload file to Cloudinary');
     }
+
+    console.error('Cloudinary upload completely failed after 3 attempts:', lastError);
+    throw lastError instanceof Error 
+        ? lastError 
+        : new Error('Failed to upload file to Cloudinary');
 }
