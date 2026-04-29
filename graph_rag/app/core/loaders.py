@@ -20,6 +20,15 @@ def extract_text_from_pdf(pdf_url: str) -> str:
     res.raise_for_status()
 
     doc = fitz.open(stream=res.content, filetype="pdf")
-    pages = [page.get_text() for page in doc]
+    pages = []
+    for page in doc:
+        text = page.get_text()
+        if len(text.strip()) < 50 and hasattr(page, "get_textpage_ocr"):
+            try:
+                tp = page.get_textpage_ocr(flags=0, dpi=150, full=True)
+                text = page.get_text(textpage=tp)
+            except Exception as e:
+                print(f"OCR failed for page: {e}")
+        pages.append(text)
 
     return "\n".join(pages)

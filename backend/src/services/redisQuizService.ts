@@ -2,7 +2,7 @@ import redisClient from '../config/redis';
 
 export class RedisQuizService {
   // Quiz session management
-  static async createQuizSession(sessionId: string, quizId: number, hostUserId: string): Promise<void> {
+  static async createQuizSession(sessionId: string, quizId: number, hostUserId: string, maxPlayers: number = 50, settings: any = {}): Promise<void> {
     await redisClient.hSet(`quiz_session:${sessionId}`, {
       id: sessionId,
       quizId: quizId.toString(),
@@ -11,6 +11,8 @@ export class RedisQuizService {
       participantCount: '0',
       isActive: 'false',
       startTime: new Date().toISOString(),
+      maxPlayers: maxPlayers.toString(),
+      settings: JSON.stringify(settings),
     });
   }
 
@@ -81,10 +83,76 @@ export class RedisQuizService {
   }
 
   // Cleanup
+  static async getSessionSettings(sessionId: string): Promise<any | null> {
+    const settingsStr = await redisClient.hGet(`quiz_session:${sessionId}`, 'settings');
+    if (!settingsStr) return null;
+    try {
+      return JSON.parse(settingsStr);
+    } catch {
+      return null;
+    }
+  }
+
+  static async getMaxPlayers(sessionId: string): Promise<number> {
+    const maxPlayers = await redisClient.hGet(`quiz_session:${sessionId}`, 'maxPlayers');
+    return maxPlayers ? parseInt(maxPlayers) : 50;
+  }
+
+  static async getPlayerCount(sessionId: string): Promise<number> {
+    const players = await redisClient.sCard(`quiz_players:${sessionId}`);
+    return players;
+  }
+
+  // Team management
+  static async setPlayerTeam(sessionId: string, userId: string, teamName: string): Promise<void> {
+    await redisClient.hSet(`quiz_teams:${sessionId}`, userId, teamName);
+  }
+
+  static async getPlayerTeam(sessionId: string, userId: string): Promise<string | null> {
+    return await redisClient.hGet(`quiz_teams:${sessionId}`, userId);
+  }
+
+  static async getAllTeams(sessionId: string): Promise<Record<string, string>> {
+    return await redisClient.hGetAll(`quiz_teams:${sessionId}`);
+  }
+
+  static async getTeamScores(sessionId: string): Promise<{ teamName: string; totalScore: number; members: string[] }[]> {
+    const teams = await redisClient.hGetAll(`quiz_teams:${sessionId}`);
+    const scores = await redisClient.hGetAll(`quiz_scores:${sessionId}`);
+    const names = await redisClient.hGetAll(`quiz_names:${sessionId}`);
+
+    const teamMap: Record<string, { totalScore: number; members: string[] }> = {};
+
+    for (const [userId, teamName] of Object.entries(teams)) {
+      if (!teamMap[teamName]) {
+        teamMap[teamName] = { totalScore: 0, members: [] };
+      }
+      const userScore = parseInt(scores[userId] || '0');
+      teamMap[teamName].totalScore += userScore;
+      teamMap[teamName].members.push(names[userId] || userId);
+    }
+
+    return Object.entries(teamMap)
+      .map(([teamName, data]) => ({
+        teamName,
+        totalScore: data.totalScore,
+        members: data.members
+      }))
+      .sort((a, b) => b.totalScore - a.totalScore);
+  }
+
+  static async getNextTeam(sessionId: string): Promise<string> {
+    const teams = await redisClient.hGetAll(`quiz_teams:${sessionId}`);
+    const teamACount = Object.values(teams).filter(t => t === 'Team A').length;
+    const teamBCount = Object.values(teams).filter(t => t === 'Team B').length;
+    return teamACount <= teamBCount ? 'Team A' : 'Team B';
+  }
+
   static async cleanupSession(sessionId: string): Promise<void> {
     await redisClient.del(`quiz_session:${sessionId}`);
     await redisClient.del(`quiz_scores:${sessionId}`);
     await redisClient.del(`quiz_players:${sessionId}`);
     await redisClient.del(`quiz_names:${sessionId}`);
+    await redisClient.del(`quiz_teams:${sessionId}`);
   }
 }

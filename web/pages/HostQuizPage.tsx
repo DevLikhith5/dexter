@@ -17,9 +17,8 @@ const HostQuizPage = () => {
         const fetchQuizzes = async () => {
             try {
                 const data: any = await quizService.getAllQuizzes();
-                // Ensure we only show quizzes created by the user (though backend should enforce this)
-                // Filter if needed, but getAllQuizzes usually returns user's quizzes or public ones
-                setQuizzes(data.quizzes || []);
+                // getAllQuizzes returns an array directly (quizService extracts .quizzes from response)
+                setQuizzes(Array.isArray(data) ? data : (data.quizzes || []));
             } catch (err) {
                 console.error('Failed to fetch quizzes:', err);
                 setError('Failed to load quizzes.');
@@ -37,15 +36,8 @@ const HostQuizPage = () => {
         setStartingQuizId(quizId);
         setError('');
         try {
-            const response = await quizService.startMultiplayerSession(quizId, 10); // Default 10 players
-            // Navigate to the waiting room as a host (or just show the code)
-            // For now, let's redirect to a Host View. 
-            // Since we don't have a specific Host View yet, we can reuse QuizRoomPage 
-            // OR create a dedicated HostLobbyPage.
-            // Reusing QuizRoomPage might be confusing if logic differs (host controls vs player).
-            // For MVP, let's use QuizRoomPage but maybe add 'isHost' flag content?
-            // Actually, let's just show the code here or redirect to a Host Lobby.
-            // Let's redirect to the same room but maybe we handle it differently later.
+            // Backend now reads maxPlayers from quiz settings automatically
+            const response = await quizService.startMultiplayerSession(quizId);
             navigate(`/dashboard/quiz/${response.sessionId}`, { state: { isHost: true } });
         } catch (err: any) {
             console.error('Failed to start session:', err);

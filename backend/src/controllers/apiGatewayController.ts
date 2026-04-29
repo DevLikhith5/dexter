@@ -71,7 +71,7 @@ export const createQuizWithAI = async (req: AuthRequest, res: Response) => {
 
 const startMultiplayerSessionSchema = z.object({
   quizId: z.number().int().positive(),
-  maxPlayers: z.number().int().positive().optional().default(10),
+  maxPlayers: z.number().int().positive().optional(),
 });
 
 export const startMultiplayerQuizSession = async (req: AuthRequest, res: Response) => {

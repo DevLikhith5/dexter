@@ -32,6 +32,15 @@ const QuizRoomPage = () => {
     const [participantCount, setParticipantCount] = useState(0);
 
     const [leaderboard, setLeaderboard] = useState<{ userId: string; score: number; userName?: string }[]>([]);
+    const [teamScores, setTeamScores] = useState<{ teamName: string; totalScore: number; members: string[] }[]>([]);
+    const [playerTeam, setPlayerTeam] = useState<string | null>(null);
+    const [sessionSettings, setSessionSettings] = useState<{
+        timer: number;
+        showLeaderboard: boolean;
+        showTeacherNotes: boolean;
+        gameMode: string;
+    } | null>(null);
+    const [speedBonus, setSpeedBonus] = useState<number | null>(null);
 
     const location = useLocation();
     const [isHost, setIsHost] = useState(location.state?.isHost || false);
@@ -63,6 +72,12 @@ const QuizRoomPage = () => {
                 if (message.payload.isHost !== undefined) {
                     setIsHost(message.payload.isHost);
                 }
+                if (message.payload.settings) {
+                    setSessionSettings(message.payload.settings);
+                }
+                if (message.payload.team) {
+                    setPlayerTeam(message.payload.team);
+                }
 
                 if (message.payload.currentQuestion) {
                     setStatus('playing');
@@ -70,7 +85,12 @@ const QuizRoomPage = () => {
                     if (message.payload.currentQuestionIndex !== undefined) {
                         setQuestionIndex(message.payload.currentQuestionIndex);
                     }
-                    setTimeLeft(30); // Default to 30 for late joiners for now
+                    if (message.payload.totalQuestions !== undefined && message.payload.totalQuestions > 0) {
+                        setTotalQuestions(message.payload.totalQuestions);
+                    }
+                    // Use remainingTime for late joiners, fallback to full timer
+                    const timer = message.payload.remainingTime ?? message.payload.settings?.timer ?? 30;
+                    setTimeLeft(timer);
                 } else {
                     setStatus('waiting');
                 }
@@ -89,29 +109,43 @@ const QuizRoomPage = () => {
                 setStatus('playing');
                 setCurrentQuestion(message.payload.question);
                 setQuestionIndex(message.payload.currentQuestionIndex);
+                if (message.payload.totalQuestions !== undefined) {
+                    setTotalQuestions(message.payload.totalQuestions);
+                }
                 setSelectedOption(null);
                 setFeedback(null);
-                setTimeLeft(30); // Reset timer. Optionally, backend sends timer
+                setSpeedBonus(null);
+                const timer = message.payload.timer || sessionSettings?.timer || 30;
+                setTimeLeft(timer);
             }
             else if (message.type === 'answer_submitted') {
                 setStatus('feedback');
+                const showTeacherNotes = sessionSettings?.showTeacherNotes !== false;
                 setFeedback({
                     isCorrect: message.payload.isCorrect,
                     message: message.payload.message,
-                    explanation: message.payload.explanation
+                    explanation: showTeacherNotes ? message.payload.explanation : undefined
                 });
                 setScore(message.payload.newScore);
+                if (message.payload.speedBonus) {
+                    setSpeedBonus(message.payload.speedBonus);
+                }
             }
             else if (message.type === 'quiz_finished') {
                 setStatus('finished');
             }
             else if (message.type === 'scores_update') {
-                setLeaderboard(message.payload.scores);
+                if (sessionSettings?.showLeaderboard !== false) {
+                    setLeaderboard(message.payload.scores);
+                }
+                if (message.payload.teamScores) {
+                    setTeamScores(message.payload.teamScores);
+                }
             }
         });
 
         return () => unsubscribe();
-    }, [subscribe]);
+    }, [subscribe, sessionSettings]);
 
     useEffect(() => {
         let timerId: NodeJS.Timeout;
@@ -166,6 +200,11 @@ const QuizRoomPage = () => {
                         <div className="text-xs text-muted-foreground">Score</div>
                         <div className="font-bold text-xl">{score}</div>
                     </div>
+                    {playerTeam && (
+                        <div className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-xs font-bold">
+                            {playerTeam}
+                        </div>
+                    )}
                     <div className="px-3 py-1 rounded-full bg-gray-100 dark:bg-white/10 text-xs font-medium">
                         {participantCount} Players
                     </div>
@@ -190,7 +229,7 @@ const QuizRoomPage = () => {
                             {isHost && (
                                 <div className="flex flex-col items-center gap-8">
                                     <div className="bg-white p-4 rounded-2xl shadow-xl inline-block border border-gray-100">
-                                        <QRCodeSVG 
+                                        <QRCodeSVG
                                             value={`${window.location.origin}/#/join?code=${sessionId}`}
                                             size={200}
                                             level="H"
@@ -291,6 +330,13 @@ const QuizRoomPage = () => {
                                             </h3>
                                         </div>
                                         <p className="text-foreground/80 text-lg mb-6">{feedback.message}</p>
+                                        {speedBonus !== null && speedBonus > 0 && (
+                                            <div className="bg-yellow-50/50 dark:bg-yellow-900/10 p-4 rounded-2xl border border-yellow-200/50 dark:border-yellow-800/30 mb-4">
+                                                <p className="text-sm font-bold text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
+                                                    ⚡ Speed Bonus +{speedBonus} pts
+                                                </p>
+                                            </div>
+                                        )}
                                         {feedback.explanation && (
                                             <div className="bg-white/40 dark:bg-black/20 p-6 rounded-2xl border border-black/5 dark:border-white/5">
                                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest mb-2 opacity-50">Deep Dive</p>
@@ -317,47 +363,79 @@ const QuizRoomPage = () => {
                                     </div>
                                 </div>
 
-                                {/* Leaderboard Card */}
-                                <div className="bg-white dark:bg-[#1e2025] p-6 rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm flex-1 flex flex-col min-h-0">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h4 className="font-bold text-sm uppercase tracking-widest text-muted-foreground opacity-50">Scoreboard</h4>
-                                        <div className="px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold">LIVE</div>
-                                    </div>
-                                    <div className="space-y-3 overflow-y-auto flex-1 pr-1 custom-scrollbar">
-                                        {leaderboard.length > 0 ? (
-                                            leaderboard
-                                                .sort((a, b) => b.score - a.score)
-                                                .map((entry, idx) => (
-                                                    <div
-                                                        key={entry.userId}
-                                                        className={cn(
-                                                            "flex justify-between items-center p-4 rounded-2xl transition-all duration-300",
-                                                            entry.userId === user?.id.toString() 
-                                                                ? "bg-primary text-white shadow-lg shadow-primary/20 scale-[1.02]" 
-                                                                : "bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10"
-                                                        )}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={cn(
-                                                                "w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold",
-                                                                entry.userId === user?.id.toString() ? "bg-white text-primary" : "bg-gray-200 dark:bg-white/10 text-muted-foreground"
-                                                            )}>
-                                                                {idx + 1}
-                                                            </div>
-                                                            <span className="font-medium text-sm truncate max-w-[120px]">
-                                                                {entry.userName || "Player"}
-                                                            </span>
-                                                        </div>
-                                                        <span className="font-bold text-sm tracking-tight">{entry.score}</span>
+                                {/* Team Scores (Team Mode) */}
+                                {sessionSettings?.gameMode === 'team' && teamScores.length > 0 && (
+                                    <div className="bg-white dark:bg-[#1e2025] p-6 rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h4 className="font-bold text-sm uppercase tracking-widest text-muted-foreground opacity-50">Team Standings</h4>
+                                            <div className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px] font-bold">TEAM</div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {teamScores.map((team, idx) => (
+                                                <div
+                                                    key={team.teamName}
+                                                    className={cn(
+                                                        "flex justify-between items-center p-3 rounded-xl transition-all",
+                                                        team.teamName === playerTeam
+                                                            ? "bg-purple-500/10 border border-purple-500/20"
+                                                            : "bg-gray-50 dark:bg-white/5"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-bold text-muted-foreground">{idx + 1}</span>
+                                                        <span className="font-medium text-sm">{team.teamName}</span>
+                                                        <span className="text-[10px] text-muted-foreground">({team.members.length} players)</span>
                                                     </div>
-                                                ))
-                                        ) : (
-                                            <div className="text-center py-10 text-muted-foreground text-sm italic">
-                                                No scores yet...
-                                            </div>
-                                        )}
+                                                    <span className="font-bold text-sm">{team.totalScore}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
+
+                                {/* Leaderboard Card */}
+                                {sessionSettings?.showLeaderboard !== false && (
+                                    <div className="bg-white dark:bg-[#1e2025] p-6 rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm flex-1 flex flex-col min-h-0">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h4 className="font-bold text-sm uppercase tracking-widest text-muted-foreground opacity-50">Scoreboard</h4>
+                                            <div className="px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold">LIVE</div>
+                                        </div>
+                                        <div className="space-y-3 overflow-y-auto flex-1 pr-1 custom-scrollbar">
+                                            {leaderboard.length > 0 ? (
+                                                leaderboard
+                                                    .sort((a, b) => b.score - a.score)
+                                                    .map((entry, idx) => (
+                                                        <div
+                                                            key={entry.userId}
+                                                            className={cn(
+                                                                "flex justify-between items-center p-4 rounded-2xl transition-all duration-300",
+                                                                entry.userId === user?.id.toString()
+                                                                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]"
+                                                                    : "bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 text-foreground"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={cn(
+                                                                    "w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold",
+                                                                    entry.userId === user?.id.toString() ? "bg-primary-foreground text-primary" : "bg-gray-200 dark:bg-white/10 text-muted-foreground"
+                                                                )}>
+                                                                    {idx + 1}
+                                                                </div>
+                                                                <span className="font-medium text-sm truncate max-w-[120px]">
+                                                                    {entry.userName || "Player"}
+                                                                </span>
+                                                            </div>
+                                                            <span className="font-bold text-sm tracking-tight">{entry.score}</span>
+                                                        </div>
+                                                    ))
+                                            ) : (
+                                                <div className="text-center py-10 text-muted-foreground text-sm italic">
+                                                    No scores yet...
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Persistent Controls */}
                                 <div className="space-y-4">
@@ -393,7 +471,7 @@ const QuizRoomPage = () => {
                                         <p className="text-5xl text-primary font-black font-mono">{score}</p>
                                     </div>
                                 )}
-                                
+
                                 <div className="text-left mb-8">
                                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                                         <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">🎯</div>
@@ -408,18 +486,18 @@ const QuizRoomPage = () => {
                                                         key={entry.userId}
                                                         className={cn(
                                                             "flex justify-between items-center p-4 rounded-2xl transition-all",
-                                                            entry.userId === user?.id.toString() 
-                                                                ? "bg-primary text-white shadow-lg" 
-                                                                : "bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5"
+                                                            entry.userId === user?.id.toString()
+                                                                ? "bg-primary text-primary-foreground shadow-lg"
+                                                                : "bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 text-foreground"
                                                         )}
                                                     >
                                                         <div className="flex items-center gap-4">
                                                             <div className={cn(
                                                                 "w-10 h-10 rounded-xl flex items-center justify-center font-bold",
                                                                 idx === 0 ? "bg-yellow-400 text-white text-xl shadow-lg shadow-yellow-400/20" :
-                                                                idx === 1 ? "bg-gray-300 text-gray-700 text-xl shadow-lg shadow-gray-400/20" :
-                                                                idx === 2 ? "bg-amber-600 text-white text-xl shadow-lg shadow-amber-600/20" :
-                                                                entry.userId === user?.id.toString() ? "bg-white/20 text-white" : "bg-gray-200 dark:bg-white/10 text-muted-foreground"
+                                                                    idx === 1 ? "bg-gray-300 text-gray-700 text-xl shadow-lg shadow-gray-400/20" :
+                                                                        idx === 2 ? "bg-amber-600 text-white text-xl shadow-lg shadow-amber-600/20" :
+                                                                            entry.userId === user?.id.toString() ? "bg-primary-foreground text-primary" : "bg-gray-200 dark:bg-white/10 text-muted-foreground"
                                                             )}>
                                                                 {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : idx + 1}
                                                             </div>
@@ -437,15 +515,15 @@ const QuizRoomPage = () => {
                                 </div>
                                 <Button size="lg" className="w-full py-4 text-lg rounded-xl" onClick={() => navigate('/dashboard')}>Return to Dashboard</Button>
                             </div>
-                            
+
                             {isHost && (
                                 <div className="bg-white dark:bg-[#1e2025] rounded-3xl border border-gray-200 dark:border-white/10 p-8 shadow-sm">
                                     <h3 className="font-bold text-xl mb-2 flex items-center gap-2">
-                                        <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                                        <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" /></svg>
                                         Google Sheets Sync
                                     </h3>
                                     <p className="text-muted-foreground mb-6 text-sm">Export the final leaderboard directly to your Google Sheet. Make sure you entered a valid Sheet ID.</p>
-                                    
+
                                     <div className="flex flex-col gap-4">
                                         <input
                                             type="text"
@@ -454,15 +532,15 @@ const QuizRoomPage = () => {
                                             onChange={(e) => setSheetId(e.target.value)}
                                             className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-mono text-sm"
                                         />
-                                        <Button 
-                                            onClick={handleSyncToSheets} 
+                                        <Button
+                                            onClick={handleSyncToSheets}
                                             disabled={!sheetId || syncStatus === 'syncing'}
                                             className="w-full py-4 rounded-xl bg-[#0f9d58] hover:bg-[#0b8043] text-white shadow-lg shadow-green-500/20 font-bold flex items-center justify-center gap-2"
                                         >
-                                            {syncStatus === 'syncing' ? 'Syncing...' : 
-                                             syncStatus === 'success' ? '✓ Synced Successfully!' : 
-                                             syncStatus === 'error' ? '❌ Sync Failed' : 
-                                             'Sync to Google Sheets'}
+                                            {syncStatus === 'syncing' ? 'Syncing...' :
+                                                syncStatus === 'success' ? '✓ Synced Successfully!' :
+                                                    syncStatus === 'error' ? '❌ Sync Failed' :
+                                                        'Sync to Google Sheets'}
                                         </Button>
                                     </div>
                                 </div>

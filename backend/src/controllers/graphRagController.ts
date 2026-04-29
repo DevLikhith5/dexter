@@ -69,7 +69,8 @@ export const generateQuestions = async (req: Request, res: Response) => {
     try {
         const { graphId, count, difficulty, type } = generateSchema.parse({
             graphId: req.params.graphId,
-            count: req.query.count ? parseInt(req.query.count as string) : undefined,
+            // count comes from the path: /generate/:graphId/:count
+            count: req.params.count ? parseInt(req.params.count as string) : undefined,
             difficulty: req.query.difficulty,
             type: req.query.type,
         });

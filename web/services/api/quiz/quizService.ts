@@ -99,13 +99,14 @@ class QuizService {
     });
   }
 
-  async startMultiplayerSession(quizId: number, maxPlayers: number): Promise<{ sessionId: string }> {
+  async startMultiplayerSession(quizId: number, maxPlayers?: number): Promise<{ sessionId: string }> {
+    const body: any = { quizId };
+    if (maxPlayers !== undefined) {
+      body.maxPlayers = maxPlayers;
+    }
     return makeRequest<{ sessionId: string }>('/gateway/start-multiplayer-session', {
       method: 'POST',
-      body: {
-        quizId,
-        maxPlayers
-      },
+      body,
     });
   }
 

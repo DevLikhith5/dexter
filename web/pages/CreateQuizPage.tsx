@@ -893,8 +893,12 @@ const CreateQuizPage = () => {
     const navigate = useNavigate();
     const {
         step, sessionId, formData, ingestionStatus, isGenerating,
-        setStep, updateFormData, addLink, addFile, addStoredGraph, removeLink, removeFile, generateQuestions, updateQuestions, saveQuiz
+        setStep, updateFormData, addLink, addFile, addStoredGraph, removeLink, removeFile, generateQuestions, updateQuestions, saveQuiz, reset
     } = useQuizStore();
+
+    useEffect(() => {
+        reset();
+    }, []);
 
     const nextStep = () => {
         if (step === 2 && formData.questions.length === 0) {

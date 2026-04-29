@@ -102,13 +102,20 @@ export class APIGatewayService {
   static async startMultiplayerQuizSession(
     quizId: number,
     hostUserId: string,
-    maxPlayers: number = 10
+    maxPlayers?: number
   ): Promise<string> {
     // Generate a unique session ID
     const sessionId = `quiz_${quizId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Initialize the quiz session in Redis
-    await RedisQuizService.createQuizSession(sessionId, quizId, hostUserId);
+    // Fetch quiz to get settings and maxParticipants
+    const quiz = await QuizService.getQuizById(quizId);
+    const effectiveMaxPlayers = maxPlayers 
+      ?? quiz?.maxParticipants 
+      ?? quiz?.settings?.participantLimit 
+      ?? 50;
+
+    // Initialize the quiz session in Redis with settings
+    await RedisQuizService.createQuizSession(sessionId, quizId, hostUserId, effectiveMaxPlayers, quiz?.settings || {});
 
     return sessionId;
   }

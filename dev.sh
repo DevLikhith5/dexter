@@ -8,7 +8,13 @@ docker-compose up -d
 
 # 2. Check if the containers are healthy
 echo "⏳ Waiting for containers to initialize..."
-sleep 5
+for i in {1..30}; do
+  if nc -z localhost 7687 && nc -z localhost 5440 && nc -z localhost 6389; then
+    echo "✅ Containers are ready!"
+    break
+  fi
+  sleep 2
+done
 
 # Function to handle cleanup on exit
 cleanup() {
@@ -29,13 +35,13 @@ cd ..
 # 4. Start Backend (Express API)
 echo "📡 Starting Backend API (Port 5001)..."
 cd backend
-bun run dev &
+npm run dev &
 cd ..
 
 # 5. Start Frontend (Vite)
-echo "💻 Starting Frontend (Port 5173)..."
+echo "💻 Starting Frontend (Port 3000)..."
 cd web
-bun run dev &
+npm run dev &
 cd ..
 
 echo "✅ All services are starting up! Press Ctrl+C to stop everything."

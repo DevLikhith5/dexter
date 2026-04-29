@@ -15,8 +15,10 @@ interface QuizSession {
   currentQuestionIndex: number;
   scores: Map<string, number>;
   startTime?: Date;
+  questionStartTime?: Date;
   submittedAnswers: Set<string>;
   timerTimeout?: NodeJS.Timeout;
+  settings?: any;
 }
 
 
@@ -126,6 +128,11 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
       session.participants.push(ws);
     }
 
+    // Load quiz settings from Redis if not already cached in session
+    if (!session.settings) {
+      session.settings = await RedisQuizService.getSessionSettings(sessionId);
+    }
+
     // Check if user is host
     let isHost = false;
     if (session.hostUserId === userId) {
@@ -134,6 +141,18 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
     }
 
     if (!isHost) {
+      // Enforce participant limit
+      const maxPlayers = await RedisQuizService.getMaxPlayers(sessionId);
+      const currentPlayerCount = await RedisQuizService.getPlayerCount(sessionId);
+      if (currentPlayerCount >= maxPlayers) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          payload: { message: 'Quiz session is full. Maximum participants reached.' }
+        }));
+        activeConnections.delete(ws);
+        return;
+      }
+
       // Add player to session in Redis only if not host
       await RedisQuizService.addPlayerToSession(sessionId, userId);
       if (userName) {
@@ -145,14 +164,30 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
         session.scores.set(userId, 0);
         await RedisQuizService.updatePlayerScore(sessionId, userId, 0);
       }
+
+      // Auto-assign team in team mode
+      const gameMode = session.settings?.gameMode || 'classic';
+      if (gameMode === 'team') {
+        const teamName = await RedisQuizService.getNextTeam(sessionId);
+        await RedisQuizService.setPlayerTeam(sessionId, userId, teamName);
+      }
     }
-    
+
     // Update participant count in Redis (players only)
     const players = await RedisQuizService.getPlayersInSession(sessionId);
     const participantCount = players.length;
     await RedisQuizService.updateParticipantCount(sessionId, participantCount);
 
     let currentQuestionPayload = null;
+    let remainingTime = null;
+    let totalQuestions = 0;
+    
+    // Even if we are not at a question yet, try to get totalQuestions if available
+    const questionsStr = await redisClient.get(`quiz_questions:${sessionId}`);
+    if (questionsStr) {
+        totalQuestions = JSON.parse(questionsStr).length;
+    }
+
     if (session.currentQuestionIndex >= 0) {
       // Quiz is active, fetch current question
       const questionsStr = await redisClient.get(`quiz_questions:${sessionId}`);
@@ -168,6 +203,12 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
             options: currentQuestion.options,
             points: currentQuestion.points
           };
+          // Calculate remaining time for late joiners
+          if (session.questionStartTime) {
+            const timerDuration = (session.settings?.timer || 30) * 1000;
+            const elapsedMs = Date.now() - session.questionStartTime.getTime();
+            remainingTime = Math.max(0, Math.ceil((timerDuration - elapsedMs) / 1000));
+          }
         }
       } else {
         console.log(`[DEBUG] Session ${sessionId} active but NO questions in Redis!`);
@@ -176,15 +217,38 @@ const joinQuizSession = async (ws: WebSocket, payload: { sessionId: string; user
       console.log(`[DEBUG] Session ${sessionId} join. Index is ${session.currentQuestionIndex} (waiting state)`);
     }
 
+    // Build settings payload for frontend
+    const settingsPayload = session.settings ? {
+      timer: session.settings.timer || 30,
+      showLeaderboard: session.settings.showLeaderboard !== false,
+      showTeacherNotes: session.settings.showTeacherNotes !== false,
+      gameMode: session.settings.gameMode || 'classic',
+      shuffleQuestions: session.settings.shuffleQuestions === true,
+    } : {};
+
     // Send success response with initial quiz data
-    const payload = {
+    const payload: any = {
       sessionId,
       message: 'Successfully joined quiz session',
       participantCount,
       currentQuestionIndex: session.currentQuestionIndex,
+      totalQuestions,
       isHost,
-      currentQuestion: currentQuestionPayload
+      currentQuestion: currentQuestionPayload,
+      settings: settingsPayload
     };
+    if (remainingTime !== null) {
+      payload.remainingTime = remainingTime;
+    }
+
+    // Include team info for team mode
+    const gameMode = session.settings?.gameMode || 'classic';
+    if (gameMode === 'team' && !isHost) {
+      const playerTeam = await RedisQuizService.getPlayerTeam(sessionId, userId);
+      if (playerTeam) {
+        payload.team = playerTeam;
+      }
+    }
     // console.log('[DEBUG] Sending joined_quiz payload:', JSON.stringify(payload, null, 2));
 
     ws.send(JSON.stringify({
@@ -243,11 +307,32 @@ const handleAnswerSubmission = async (ws: WebSocket, payload: { sessionId: strin
 
     const isCorrect = evaluationResult.isCorrect;
 
+    // Load session settings for game mode
+    const sessionSettings = session.settings || await RedisQuizService.getSessionSettings(sessionId) || {};
+    const gameMode = sessionSettings.gameMode || 'classic';
+
+    // Calculate points
+    let pointsAwarded = question.points || 10;
+    let speedBonus = 0;
+
+    if (isCorrect) {
+      // Speed run mode: bonus for faster answers
+      if (gameMode === 'speed' && session.questionStartTime) {
+        const elapsedMs = Date.now() - session.questionStartTime.getTime();
+        const timerDuration = (sessionSettings.timer || 30) * 1000;
+        const timeRemaining = Math.max(0, timerDuration - elapsedMs);
+        // Bonus: up to 50% extra points for fast answers
+        speedBonus = Math.round((timeRemaining / timerDuration) * (pointsAwarded * 0.5));
+        pointsAwarded += speedBonus;
+      }
+    } else {
+      pointsAwarded = 0;
+    }
+
     // Update the score in memory and Redis
     let newScore = 0;
     if (isCorrect) {
-      // Award points based on the question's point value
-      newScore = await RedisQuizService.incrementPlayerScore(sessionId, userId, question.points || 10);
+      newScore = await RedisQuizService.incrementPlayerScore(sessionId, userId, pointsAwarded);
     } else {
       // Get current score if incorrect
       newScore = await RedisQuizService.getPlayerScore(sessionId, userId);
@@ -290,23 +375,36 @@ const handleAnswerSubmission = async (ws: WebSocket, payload: { sessionId: strin
     await quizAttemptService.QuizAttemptService.submitAnswer(
       { attemptId, questionId, content: answer },
       isCorrect,
-      isCorrect ? (question.points || 10) : 0
+      isCorrect ? pointsAwarded : 0
     );
+
+    // Only include explanation if showTeacherNotes is enabled
+    const showTeacherNotes = sessionSettings.showTeacherNotes !== false;
+    const responsePayload: any = {
+      questionId,
+      isCorrect,
+      message: isCorrect ? 'Correct answer!' : 'Incorrect answer',
+      newScore,
+    };
+    if (showTeacherNotes) {
+      responsePayload.explanation = evaluationResult.explanation;
+    }
+    if (gameMode === 'speed' && isCorrect) {
+      responsePayload.speedBonus = speedBonus;
+      responsePayload.basePoints = question.points || 10;
+    }
 
     // Send acknowledgment back to the user who submitted the answer
     ws.send(JSON.stringify({
       type: 'answer_submitted',
-      payload: {
-        questionId,
-        isCorrect,
-        message: isCorrect ? 'Correct answer!' : 'Incorrect answer',
-        newScore,
-        explanation: evaluationResult.explanation
-      }
+      payload: responsePayload
     }));
 
-    // Broadcast updated scores to all participants
-    broadcastScoresUpdate(sessionId);
+    // Only broadcast scores if showLeaderboard is enabled
+    const showLeaderboard = sessionSettings.showLeaderboard !== false;
+    if (showLeaderboard) {
+      broadcastScoresUpdate(sessionId);
+    }
   } catch (error) {
     console.error('Error handling answer submission:', error);
     ws.send(JSON.stringify({
@@ -335,12 +433,14 @@ const startQuiz = async (sessionId: string) => {
       console.error('Session data not found in Redis:', sessionId);
 
       session.participants.forEach(ws => {
-        ws.send(JSON.stringify({
-          type: 'error',
-          payload: { message: 'Session data not found' }
-        }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            payload: { message: 'Session data not found' }
+          }));
+        }
       });
-      return; 
+      return;
     }
 
     const quizId = parseInt(sessionData.quizId || '0');
@@ -358,10 +458,12 @@ const startQuiz = async (sessionId: string) => {
       console.error('No questions found for quiz:', quizId);
 
       session.participants.forEach(ws => {
-        ws.send(JSON.stringify({
-          type: 'error',
-          payload: { message: 'No questions available for this quiz' }
-        }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            payload: { message: 'No questions available for this quiz' }
+          }));
+        }
       });
       return;
     }
@@ -371,15 +473,17 @@ const startQuiz = async (sessionId: string) => {
 
 
     session.participants.forEach(ws => {
-      ws.send(JSON.stringify({
-        type: 'quiz_started',
-        payload: {
-          sessionId,
-          message: 'Quiz has started!',
-          startTime: session!.startTime,
-          totalQuestions: questions.length
-        }
-      }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'quiz_started',
+          payload: {
+            sessionId,
+            message: 'Quiz has started!',
+            startTime: session!.startTime,
+            totalQuestions: questions.length
+          }
+        }));
+      }
     });
 
 
@@ -388,10 +492,12 @@ const startQuiz = async (sessionId: string) => {
     console.error('Error in startQuiz:', error);
 
     session.participants.forEach(ws => {
-      ws.send(JSON.stringify({
-        type: 'error',
-        payload: { message: 'Failed to start quiz' }
-      }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          payload: { message: 'Failed to start quiz' }
+        }));
+      }
     });
   }
 };
@@ -417,10 +523,12 @@ const nextQuestion = async (sessionId: string) => {
     if (!questionsStr) {
       console.error('Questions not found in Redis for session:', sessionId);
       session.participants.forEach(ws => {
-        ws.send(JSON.stringify({
-          type: 'error',
-          payload: { message: 'Questions not available' }
-        }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            payload: { message: 'Questions not available' }
+          }));
+        }
       });
       return;
     }
@@ -430,13 +538,15 @@ const nextQuestion = async (sessionId: string) => {
     if (!currentQuestion) {
 
       session.participants.forEach(ws => {
-        ws.send(JSON.stringify({
-          type: 'quiz_finished',
-          payload: {
-            sessionId,
-            message: 'Quiz finished!'
-          }
-        }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'quiz_finished',
+            payload: {
+              sessionId,
+              message: 'Quiz finished!'
+            }
+          }));
+        }
       });
 
       const sessionData = await RedisQuizService.getQuizSession(sessionId);
@@ -468,41 +578,49 @@ const nextQuestion = async (sessionId: string) => {
     }
 
 
+    // Reset submitted answers for the new question
+    session.submittedAnswers.clear();
+
+    // Load timer from session settings (cached in memory or from Redis)
+    const sessionSettings = session.settings || await RedisQuizService.getSessionSettings(sessionId) || {};
+    const timerSeconds = sessionSettings.timer || 30;
+
+    session.questionStartTime = new Date();
+
     session.participants.forEach(ws => {
-      ws.send(JSON.stringify({
-        type: 'next_question',
-        payload: {
-          sessionId,
-          currentQuestionIndex: session.currentQuestionIndex,
-          question: {
-            id: currentQuestion.id,
-            content: currentQuestion.content,
-            type: currentQuestion.type,
-            options: currentQuestion.options,
-            points: currentQuestion.points
-          },
-          message: 'Next question loaded'
-        }
-      }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'next_question',
+          payload: {
+            sessionId,
+            currentQuestionIndex: session.currentQuestionIndex,
+            totalQuestions: questions.length,
+            question: {
+              id: currentQuestion.id,
+              content: currentQuestion.content,
+              type: currentQuestion.type,
+              options: currentQuestion.options,
+              points: currentQuestion.points
+            },
+            timer: timerSeconds,
+            message: 'Next question loaded'
+          }
+        }));
+      }
     });
 
-    
-    const sessionData = await RedisQuizService.getQuizSession(sessionId);
-    if (sessionData && sessionData.quizId) {
-      const quizService = await import('../services/quizService');
-      const quiz = await quizService.QuizService.getQuizById(parseInt(sessionData.quizId));
-      const timerBase = quiz?.settings?.timerPerQuestion || 30; 
-      session.timerTimeout = setTimeout(() => {
-        nextQuestion(sessionId);
-      }, (timerBase + 5) * 1000); 
-    }
+    session.timerTimeout = setTimeout(() => {
+      nextQuestion(sessionId);
+    }, (timerSeconds + 5) * 1000);
   } catch (error) {
     console.error('Error in nextQuestion:', error);
     session.participants.forEach(ws => {
-      ws.send(JSON.stringify({
-        type: 'error',
-        payload: { message: 'Failed to load next question' }
-      }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          payload: { message: 'Failed to load next question' }
+        }));
+      }
     });
   }
 };
@@ -513,17 +631,27 @@ const broadcastScoresUpdate = async (sessionId: string) => {
 
 
   const scores = await RedisQuizService.getAllScores(sessionId);
+  const gameMode = session.settings?.gameMode || 'classic';
 
+  const payload: any = {
+    sessionId,
+    scores,
+    message: 'Scores updated'
+  };
+
+  // Include team scores in team mode
+  if (gameMode === 'team') {
+    const teamScores = await RedisQuizService.getTeamScores(sessionId);
+    payload.teamScores = teamScores;
+  }
 
   session.participants.forEach(ws => {
-    ws.send(JSON.stringify({
-      type: 'scores_update',
-      payload: {
-        sessionId,
-        scores,
-        message: 'Scores updated'
-      }
-    }));
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'scores_update',
+        payload
+      }));
+    }
   });
 };
 
@@ -531,7 +659,7 @@ const handleDisconnection = async (ws: WebSocket) => {
 
   const sessionId = activeConnections.get(ws);
   if (!sessionId) {
-    return; 
+    return;
   }
 
 

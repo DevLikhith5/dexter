@@ -1,0 +1,776 @@
+{
+  "title": "Requirements Analysis and Specification — Question Bank",
+  "course": "Software Engineering — Unit II",
+  "institution": "SRM University-AP",
+  "total_questions": 75,
+  "sections": {
+    "MCQ": {
+      "description": "Multiple Choice Questions — choose the single best answer",
+      "count": 25,
+      "questions": [
+        {
+          "id": "MCQ-E-01",
+          "difficulty": "easy",
+          "topic": "Requirements Engineering Basics",
+          "question": "What does Requirements Engineering (RE) primarily produce?",
+          "options": {
+            "A": "A compiled executable program",
+            "B": "A large natural-language document describing what the system will do",
+            "C": "A database schema for the system",
+            "D": "A test suite for the final software"
+          },
+          "answer": "B",
+          "explanation": "RE produces one large document written in natural language containing a description of what the system will do."
+        },
+        {
+          "id": "MCQ-E-02",
+          "difficulty": "easy",
+          "topic": "Types of Requirements",
+          "question": "Which of the following best describes a User Requirement?",
+          "options": {
+            "A": "A detailed specification of system functions written in technical language",
+            "B": "A high-level abstract statement written in natural language with diagrams",
+            "C": "A structured document listing function signatures and API contracts",
+            "D": "A performance metric measured in milliseconds"
+          },
+          "answer": "B",
+          "explanation": "User requirements are high-level abstract requirements written in natural language plus diagrams describing services and operational constraints."
+        },
+        {
+          "id": "MCQ-E-03",
+          "difficulty": "easy",
+          "topic": "Functional Requirements — MHC-PMS",
+          "question": "Which of the following is a functional requirement for the MHC-PMS?",
+          "options": {
+            "A": "The system shall be available Mon–Fri from 0830 to 17:30",
+            "B": "Each staff member shall be identified by an 8-digit employee number",
+            "C": "Downtime shall not exceed five seconds in any one day",
+            "D": "Users shall authenticate using a health authority identity card"
+          },
+          "answer": "B",
+          "explanation": "Staff identification by employee number describes what the system does — a functional requirement. The rest are non-functional (availability, downtime, authentication policy)."
+        },
+        {
+          "id": "MCQ-E-04",
+          "difficulty": "easy",
+          "topic": "Non-functional Requirements Scope",
+          "question": "Non-functional requirements typically apply to:",
+          "options": {
+            "A": "Individual features in isolation",
+            "B": "The system as a whole rather than individual features or services",
+            "C": "Only the user interface layer",
+            "D": "Only the database layer"
+          },
+          "answer": "B",
+          "explanation": "Non-functional requirements often apply to the system as a whole rather than individual features — e.g., reliability, performance."
+        },
+        {
+          "id": "MCQ-E-05",
+          "difficulty": "easy",
+          "topic": "Goals vs Verifiable Requirements",
+          "question": "A requirement that can be verified using an objective measure is called:",
+          "options": {
+            "A": "A goal",
+            "B": "A domain requirement",
+            "C": "A verifiable non-functional requirement",
+            "D": "A user story"
+          },
+          "answer": "C",
+          "explanation": "A verifiable non-functional requirement uses some measure that can be objectively tested, unlike a goal which is a general intention like ease of use."
+        },
+        {
+          "id": "MCQ-E-06",
+          "difficulty": "easy",
+          "topic": "System Requirements Audience",
+          "question": "System requirements are primarily intended for which audience?",
+          "options": {
+            "A": "End-users and client managers only",
+            "B": "Developers, testers, and system architects",
+            "C": "Government regulatory bodies",
+            "D": "Marketing and sales teams"
+          },
+          "answer": "B",
+          "explanation": "System requirements target developers, testers, client engineers, and system architects — they are detailed and technical."
+        },
+        {
+          "id": "MCQ-E-07",
+          "difficulty": "easy",
+          "topic": "Domain Requirements Source",
+          "question": "Domain requirements are derived from:",
+          "options": {
+            "A": "The project manager's personal preferences",
+            "B": "The application domain of the system rather than specific user needs",
+            "C": "The programming language chosen for development",
+            "D": "The end-user interface wireframes"
+          },
+          "answer": "B",
+          "explanation": "Domain requirements come from the application domain itself — e.g., braking characteristics for a train control system — not from specific user requests."
+        },
+        {
+          "id": "MCQ-E-08",
+          "difficulty": "easy",
+          "topic": "Organisational NFR",
+          "question": "Which is an example of an Organisational non-functional requirement?",
+          "options": {
+            "A": "The system shall process 500 transactions per second",
+            "B": "The system shall comply with GDPR regulations",
+            "C": "The system shall be developed using the Python programming language",
+            "D": "The system shall have a mean time to failure of 1000 hours"
+          },
+          "answer": "C",
+          "explanation": "Specifying a programming language is an organisational requirement derived from development process policies."
+        },
+        {
+          "id": "MCQ-E-09",
+          "difficulty": "easy",
+          "topic": "MHC-PMS System Design",
+          "question": "The MHC-PMS is designed to also run locally on a PC so that:",
+          "options": {
+            "A": "It can be sold as standalone commercial software",
+            "B": "It can be accessed from sites without secure network connectivity",
+            "C": "It avoids cloud computing costs",
+            "D": "Patients can access it directly at home"
+          },
+          "answer": "B",
+          "explanation": "MHC-PMS was designed to run on a PC so it can be used from sites that do not have secure network connectivity."
+        },
+        {
+          "id": "MCQ-M-01",
+          "difficulty": "medium",
+          "topic": "Requirements Completeness and Consistency",
+          "question": "Why is it practically impossible to produce a complete and consistent requirements document?",
+          "options": {
+            "A": "Developers intentionally omit requirements",
+            "B": "Stakeholder conflicts, changing needs, and system complexity make gaps and contradictions unavoidable",
+            "C": "Natural language is too expressive",
+            "D": "Requirements tools are not sophisticated enough"
+          },
+          "answer": "B",
+          "explanation": "In practice, stakeholder conflicts and the complexity of capturing all system interactions make truly complete and consistent requirements impossible."
+        },
+        {
+          "id": "MCQ-M-02",
+          "difficulty": "medium",
+          "topic": "Requirements Imprecision — MHC-PMS",
+          "question": "In MHC-PMS, the requirement 'A user shall be able to search the appointments list for all clinics' caused ambiguity because:",
+          "options": {
+            "A": "The word 'user' was not defined",
+            "B": "The word 'search' was interpreted differently by users and developers",
+            "C": "The word 'appointments' was too technical",
+            "D": "The requirement was written in a programming language"
+          },
+          "answer": "B",
+          "explanation": "The user intended cross-clinic search simultaneously; the developer interpreted it as selecting a clinic first then searching — both interpretations of 'search'."
+        },
+        {
+          "id": "MCQ-M-03",
+          "difficulty": "medium",
+          "topic": "NFR Metrics — Reliability",
+          "question": "For the Reliability property, which is a valid metric for specifying a non-functional requirement?",
+          "options": {
+            "A": "Number of ROM chips",
+            "B": "Percentage of target-dependent statements",
+            "C": "Mean time to failure",
+            "D": "Number of help frames"
+          },
+          "answer": "C",
+          "explanation": "Mean time to failure, probability of unavailability, and rate of failure occurrence are all metrics for the Reliability property as listed in the document."
+        },
+        {
+          "id": "MCQ-M-04",
+          "difficulty": "medium",
+          "topic": "NFR Implementation Effect",
+          "question": "A single security non-functional requirement can generate which of the following?",
+          "options": {
+            "A": "Only cost estimates",
+            "B": "Related functional requirements defining required services and constraints on existing requirements",
+            "C": "Only user interface mockups",
+            "D": "Only test plans"
+          },
+          "answer": "B",
+          "explanation": "A single NFR like security may spawn multiple related functional requirements and may also restrict or constrain existing functional requirements."
+        },
+        {
+          "id": "MCQ-M-05",
+          "difficulty": "medium",
+          "topic": "Requirements Abstraction — Davis",
+          "question": "According to Davis's principle, why must requirements be written abstractly before a contract is awarded?",
+          "options": {
+            "A": "To confuse competing bidders",
+            "B": "So that several contractors can bid, each offering potentially different approaches",
+            "C": "To avoid legal liability for the client",
+            "D": "Because natural language is always vague"
+          },
+          "answer": "B",
+          "explanation": "Requirements must be abstract enough to allow multiple contractors to bid with different approaches without pre-defining a single solution."
+        },
+        {
+          "id": "MCQ-M-06",
+          "difficulty": "medium",
+          "topic": "NFR Criticality",
+          "question": "Why can non-functional requirements be more critical than functional requirements?",
+          "options": {
+            "A": "They are easier to test",
+            "B": "If unmet, the entire system may become useless even if all functional requirements are met",
+            "C": "They are always cheaper to implement",
+            "D": "They are mandated by government regulations"
+          },
+          "answer": "B",
+          "explanation": "A system can satisfy all functional requirements but still be useless if it is too slow, unreliable, or insecure — making NFRs potentially more critical."
+        },
+        {
+          "id": "MCQ-M-07",
+          "difficulty": "medium",
+          "topic": "Usability — Testable NFR",
+          "question": "Which of the following is a testable usability non-functional requirement for MHC-PMS?",
+          "options": {
+            "A": "The system should be easy to use by medical staff",
+            "B": "User errors should be minimized",
+            "C": "Medical staff shall use all system functions after four hours of training, with no more than two errors per hour thereafter",
+            "D": "The interface should be friendly"
+          },
+          "answer": "C",
+          "explanation": "Four-hours training and a maximum of two errors per hour are measurable and objectively testable — a verifiable NFR. The others are vague goals."
+        },
+        {
+          "id": "MCQ-M-08",
+          "difficulty": "medium",
+          "topic": "Requirement Characteristics — Consistency",
+          "question": "Which characteristic ensures requirements do not contradict one another?",
+          "options": {
+            "A": "Completeness",
+            "B": "Feasibility",
+            "C": "Consistency",
+            "D": "Modifiability"
+          },
+          "answer": "C",
+          "explanation": "Consistent requirements prevent conflicts and confusion — there should be no contradictions in descriptions of system facilities."
+        },
+        {
+          "id": "MCQ-M-09",
+          "difficulty": "medium",
+          "topic": "MHC-PMS System Requirement 1.2",
+          "question": "According to MHC-PMS system requirement 1.2, when is the monthly management report automatically generated?",
+          "options": {
+            "A": "On the first working day of each month at 09:00",
+            "B": "After 17:30 on the last working day of each month",
+            "C": "Every Friday at midnight",
+            "D": "Whenever the clinic manager requests it"
+          },
+          "answer": "B",
+          "explanation": "System requirement 1.2 states the report shall be automatically generated for printing after 17:30 on the last working day of the month."
+        },
+        {
+          "id": "MCQ-H-01",
+          "difficulty": "hard",
+          "topic": "NFR Impact on System Architecture",
+          "question": "A performance NFR requiring minimal response time is most likely to impact the system architecture in which way?",
+          "options": {
+            "A": "It will only affect the user interface layer",
+            "B": "It may require reorganizing the entire system to minimize inter-component communication",
+            "C": "It will only affect the database schema",
+            "D": "NFRs have no architectural implications"
+          },
+          "answer": "B",
+          "explanation": "NFRs can affect the overall architecture. To meet performance requirements, the whole system may need to be reorganized to minimize communications between components."
+        },
+        {
+          "id": "MCQ-H-02",
+          "difficulty": "hard",
+          "topic": "Domain Requirements Understandability — Edge Case",
+          "question": "A domain requirement for a financial system specifies a margin-call formula in domain-specific financial notation. A software engineer misinterprets it. This is an example of which domain requirement problem?",
+          "options": {
+            "A": "Implicitness — the domain expert assumed the engineer knew the formula",
+            "B": "Understandability — the requirement is expressed in domain language not understood by the engineer",
+            "C": "Completeness — the formula was not fully specified",
+            "D": "Consistency — the formula contradicts another requirement"
+          },
+          "answer": "B",
+          "explanation": "This is an understandability problem — domain requirements in specialised application-domain language are often not understood by software engineers developing the system."
+        },
+        {
+          "id": "MCQ-H-03",
+          "difficulty": "hard",
+          "topic": "Requirements Dual Function — Davis Application",
+          "question": "A hospital issues a 2-page abstract requirements document for tendering, then after awarding the contract the contractor writes a 200-page detailed specification. Which statement best describes this?",
+          "options": {
+            "A": "The 2-page document is invalid since requirements must be detailed",
+            "B": "Both documents can legitimately be called the requirements document, serving different purposes at different contract stages",
+            "C": "The 200-page document replaces the 2-page document entirely",
+            "D": "Only the 200-page document satisfies the Davis definition of requirements"
+          },
+          "answer": "B",
+          "explanation": "Davis states both forms are valid requirements documents. The abstract version enables open bidding; the detailed version defines exactly what will be built."
+        },
+        {
+          "id": "MCQ-H-04",
+          "difficulty": "hard",
+          "topic": "Requirement Feasibility — Edge Case",
+          "question": "A stakeholder demands that a web application respond to every user click within 10 milliseconds globally, regardless of geography. Which requirement characteristic is most critically violated?",
+          "options": {
+            "A": "Consistency",
+            "B": "Unambiguity",
+            "C": "Feasibility",
+            "D": "Modifiability"
+          },
+          "answer": "C",
+          "explanation": "Feasibility requires requirements to align with project constraints and avoid unrealistic expectations. A 10ms global response time violates physical network latency limits, making it infeasible."
+        },
+        {
+          "id": "MCQ-H-05",
+          "difficulty": "hard",
+          "topic": "NFR Classification — External Requirement",
+          "question": "The requirement 'The MHC-PMS shall implement patient privacy provisions as set out in HStan-03-2006-priv' is classified as which type of non-functional requirement?",
+          "options": {
+            "A": "Product requirement",
+            "B": "Organisational requirement",
+            "C": "External requirement",
+            "D": "Efficiency requirement"
+          },
+          "answer": "C",
+          "explanation": "This is an External requirement — it derives from factors external to the system and its development process, specifically a legislative/regulatory privacy standard."
+        },
+        {
+          "id": "MCQ-H-06",
+          "difficulty": "hard",
+          "topic": "NFR Metrics — Portability",
+          "question": "According to the metrics table, which measures are used to specify Portability as a non-functional property?",
+          "options": {
+            "A": "Mean time to failure and probability of unavailability",
+            "B": "Training time and number of help frames",
+            "C": "Percentage of target-dependent statements and number of target systems",
+            "D": "Processed transactions per second and screen refresh time"
+          },
+          "answer": "C",
+          "explanation": "The portability metrics listed are: percentage of target-dependent statements and number of target systems the software can run on."
+        },
+        {
+          "id": "MCQ-H-07",
+          "difficulty": "hard",
+          "topic": "Requirements Engineering Sub-discipline",
+          "question": "Requirements Engineering is best described as a sub-discipline of software engineering concerned with:",
+          "options": {
+            "A": "Writing code that matches a given architecture",
+            "B": "Determining the goals, functions, and constraints of software systems",
+            "C": "Testing software against user acceptance criteria",
+            "D": "Deploying software to production environments"
+          },
+          "answer": "B",
+          "explanation": "RE is the sub-discipline of software engineering concerned with determining the goals, functions, and constraints of software systems."
+        }
+      ]
+    },
+    "TrueFalse": {
+      "description": "True or False — state whether the given statement is correct",
+      "count": 25,
+      "questions": [
+        {
+          "id": "TF-E-01",
+          "difficulty": "easy",
+          "topic": "Requirements Engineering Definition",
+          "question": "Requirements Engineering means that requirements for a product are defined, managed, and tested/validated systematically.",
+          "answer": true,
+          "explanation": "This is the exact definition of Requirements Engineering as given in the slides."
+        },
+        {
+          "id": "TF-E-02",
+          "difficulty": "easy",
+          "topic": "Functional vs Non-functional Focus",
+          "question": "Functional requirements describe HOW the system should perform, while non-functional requirements describe WHAT the system should do.",
+          "answer": false,
+          "explanation": "It is the opposite. Functional requirements describe WHAT the system should do; non-functional requirements describe HOW the system should perform."
+        },
+        {
+          "id": "TF-E-03",
+          "difficulty": "easy",
+          "topic": "User Requirements Language",
+          "question": "User requirements are always written in formal mathematical notation to avoid ambiguity.",
+          "answer": false,
+          "explanation": "User requirements are written in natural language plus diagrams — not formal notation. They are high-level and abstract."
+        },
+        {
+          "id": "TF-E-04",
+          "difficulty": "easy",
+          "topic": "MHC-PMS Offline Capability",
+          "question": "When MHC-PMS local systems are disconnected from the network, they can download and use local copies of patient records.",
+          "answer": true,
+          "explanation": "The slides explicitly state that local systems can download and use local copies of patient records when disconnected."
+        },
+        {
+          "id": "TF-E-05",
+          "difficulty": "easy",
+          "topic": "System Requirements Audience",
+          "question": "System requirements are primarily written for end-users and client managers to read.",
+          "answer": false,
+          "explanation": "System requirements target developers, testers, client engineers, and system architects — not primarily end-users and managers, who read user requirements."
+        },
+        {
+          "id": "TF-E-06",
+          "difficulty": "easy",
+          "topic": "Domain Requirements Source",
+          "question": "Domain requirements are derived from the specific personal needs of system end-users.",
+          "answer": false,
+          "explanation": "Domain requirements come from the application domain itself, not from the specific needs of system users."
+        },
+        {
+          "id": "TF-E-07",
+          "difficulty": "easy",
+          "topic": "Testable Requirements",
+          "question": "Testable requirements ensure the system can be validated, reducing the risk of implementation errors.",
+          "answer": true,
+          "explanation": "Testable requirements allow objective validation that the system meets specified criteria, reducing implementation risk."
+        },
+        {
+          "id": "TF-E-08",
+          "difficulty": "easy",
+          "topic": "NFR Criticality",
+          "question": "Non-functional requirements can never be more critical than functional requirements.",
+          "answer": false,
+          "explanation": "The slides explicitly state that non-functional requirements may be MORE critical than functional requirements — if unmet, the system may be useless."
+        },
+        {
+          "id": "TF-E-09",
+          "difficulty": "easy",
+          "topic": "MHC-PMS Goals",
+          "question": "One of the MHC-PMS goals is to provide medical staff with timely information to support patient treatment.",
+          "answer": true,
+          "explanation": "This is explicitly stated as one of the two MHC-PMS goals in the slides."
+        },
+        {
+          "id": "TF-M-01",
+          "difficulty": "medium",
+          "topic": "Requirements Completeness in Practice",
+          "question": "In principle, requirements should be both complete and consistent, but in practice it is impossible to achieve both simultaneously.",
+          "answer": true,
+          "explanation": "The slides state that while requirements should ideally be complete and consistent, in practice it is impossible to produce a document that is fully both."
+        },
+        {
+          "id": "TF-M-02",
+          "difficulty": "medium",
+          "topic": "Goals vs Verifiable NFR",
+          "question": "A goal and a verifiable non-functional requirement are essentially the same thing.",
+          "answer": false,
+          "explanation": "A goal is a general intention (e.g., ease of use) while a verifiable NFR uses a measurable metric that can be objectively tested. They are distinctly different."
+        },
+        {
+          "id": "TF-M-03",
+          "difficulty": "medium",
+          "topic": "Organisational NFR Definition",
+          "question": "Organisational non-functional requirements are a consequence of organisational policies and procedures, such as specifying the development programming language.",
+          "answer": true,
+          "explanation": "Organisational requirements derive from organisational policies — they can include how the system will be used or what language to use."
+        },
+        {
+          "id": "TF-M-04",
+          "difficulty": "medium",
+          "topic": "NFR Scope — Architecture",
+          "question": "A non-functional requirement like performance only affects individual components, never the overall system architecture.",
+          "answer": false,
+          "explanation": "NFRs may affect the overall architecture of a system rather than individual components — performance may require restructuring the whole system."
+        },
+        {
+          "id": "TF-M-05",
+          "difficulty": "medium",
+          "topic": "MHC-PMS Access Control — Requirement 1.5",
+          "question": "According to MHC-PMS system requirement 1.5, access to all cost reports is open to any authenticated staff member.",
+          "answer": false,
+          "explanation": "Requirement 1.5 states access to cost reports is restricted to authorized users listed on a management access control list — not all authenticated staff."
+        },
+        {
+          "id": "TF-M-06",
+          "difficulty": "medium",
+          "topic": "Requirements Imprecision Effect",
+          "question": "Ambiguous requirements are always interpreted the same way by both developers and users.",
+          "answer": false,
+          "explanation": "Ambiguous requirements may be interpreted in different ways by developers and users — this is precisely the problem of requirements imprecision."
+        },
+        {
+          "id": "TF-M-07",
+          "difficulty": "medium",
+          "topic": "Post-Award Contractor Obligation",
+          "question": "After a contract is awarded, the contractor must write a more detailed system definition so the client can understand and validate what the software will do.",
+          "answer": true,
+          "explanation": "Per Davis's principle, once a contract is awarded the contractor writes a detailed system definition for client validation."
+        },
+        {
+          "id": "TF-M-08",
+          "difficulty": "medium",
+          "topic": "Domain Requirements Consequence",
+          "question": "If domain requirements are not satisfied, the system may be unworkable.",
+          "answer": true,
+          "explanation": "The slides explicitly state that if domain requirements are not satisfied, the system may be unworkable."
+        },
+        {
+          "id": "TF-M-09",
+          "difficulty": "medium",
+          "topic": "NFR Metrics — Speed",
+          "question": "Screen refresh time is a valid metric for specifying the Speed property of a non-functional requirement.",
+          "answer": true,
+          "explanation": "The metrics table lists processed transactions/second, user/event response time, and screen refresh time as metrics for Speed."
+        },
+        {
+          "id": "TF-H-01",
+          "difficulty": "hard",
+          "topic": "NFR Spawning Functional Requirements",
+          "question": "A single non-functional security requirement can generate multiple functional requirements that define the system services needed to enforce that security.",
+          "answer": true,
+          "explanation": "The slides state a single NFR like security may generate related functional requirements defining required services and may also restrict existing requirements."
+        },
+        {
+          "id": "TF-H-02",
+          "difficulty": "hard",
+          "topic": "Modifiability — Edge Case",
+          "question": "Modifiable requirements mean the system itself is easy to modify at runtime — not the requirements document.",
+          "answer": false,
+          "explanation": "Modifiable requirements refer to the requirements document being structured so requirements can be changed over time — it is a property of the requirements specification, not the running system."
+        },
+        {
+          "id": "TF-H-03",
+          "difficulty": "hard",
+          "topic": "Domain Requirements Implicitness",
+          "question": "Domain experts sometimes fail to make domain requirements explicit because they assume the knowledge is obvious to everyone involved.",
+          "answer": true,
+          "explanation": "This is the implicitness problem — domain specialists understand the area so well they do not think of making domain requirements explicit."
+        },
+        {
+          "id": "TF-H-04",
+          "difficulty": "hard",
+          "topic": "Train Protection Formula — Edge Case",
+          "question": "The train deceleration formula Dtrain = Dcontrol + Dgradient is easy for a non-specialist software engineer to understand and implement without domain guidance.",
+          "answer": false,
+          "explanation": "The slides explicitly state it is difficult for a non-specialist to understand the implications of this formula and how it interacts with other requirements."
+        },
+        {
+          "id": "TF-H-05",
+          "difficulty": "hard",
+          "topic": "Robustness Metrics Completeness",
+          "question": "Probability of data corruption on failure is listed as a valid metric for measuring the Robustness property in non-functional requirements.",
+          "answer": true,
+          "explanation": "The three Robustness metrics are: time to restart after failure, percentage of events causing failure, and probability of data corruption on failure."
+        },
+        {
+          "id": "TF-H-06",
+          "difficulty": "hard",
+          "topic": "MHC-PMS Product NFR Verifiability",
+          "question": "The MHC-PMS product requirement stating the system shall be available Mon–Fri 0830–17:30 with downtime not exceeding five seconds per day is a verifiable non-functional requirement.",
+          "answer": true,
+          "explanation": "It is verifiable because availability hours and the five-second downtime cap are measurable metrics — it qualifies as both a product requirement and a verifiable NFR."
+        },
+        {
+          "id": "TF-H-07",
+          "difficulty": "hard",
+          "topic": "Functional System Requirements Detail Level",
+          "question": "Functional system requirements should provide high-level abstract descriptions, leaving detailed implementation decisions to the developer's discretion.",
+          "answer": false,
+          "explanation": "Functional system requirements should describe system services IN DETAIL. It is user requirements that are high-level and abstract."
+        }
+      ]
+    },
+    "FillInTheBlanks": {
+      "description": "Fill in the blank with the most appropriate word or phrase from the course content",
+      "count": 25,
+      "questions": [
+        {
+          "id": "FIB-E-01",
+          "difficulty": "easy",
+          "topic": "Requirements Engineering Definition",
+          "question": "Requirements Engineering is a sub-discipline of software engineering concerned with determining the goals, __________, and constraints of software systems.",
+          "answer": "functions",
+          "explanation": "RE determines the goals, functions, and constraints of software systems."
+        },
+        {
+          "id": "FIB-E-02",
+          "difficulty": "easy",
+          "topic": "Requirement Classification",
+          "question": "Software system requirements are often classified as either __________ requirements or non-functional requirements.",
+          "answer": "functional",
+          "explanation": "The two primary classifications are functional and non-functional requirements."
+        },
+        {
+          "id": "FIB-E-03",
+          "difficulty": "easy",
+          "topic": "User Requirements Language",
+          "question": "User requirements are statements written in __________ language plus diagrams of the services the system provides.",
+          "answer": "natural",
+          "explanation": "User requirements use natural language, making them accessible to non-technical stakeholders."
+        },
+        {
+          "id": "FIB-E-04",
+          "difficulty": "easy",
+          "topic": "MHC-PMS Database Architecture",
+          "question": "The MHC-PMS makes use of a __________ database of patient information.",
+          "answer": "centralized",
+          "explanation": "The MHC-PMS uses a centralized database while also supporting local PC operation."
+        },
+        {
+          "id": "FIB-E-05",
+          "difficulty": "easy",
+          "topic": "Software Requirements Source",
+          "question": "Software Requirements are the wants and needs of the __________.",
+          "answer": "stakeholders",
+          "explanation": "Requirements directly reflect what stakeholders want and need from the system."
+        },
+        {
+          "id": "FIB-E-06",
+          "difficulty": "easy",
+          "topic": "RE Document Purpose",
+          "question": "Requirements Engineering produces a large document written in natural language that contains a description of __________ the system will do.",
+          "answer": "what",
+          "explanation": "The RE document describes what the system will do — not how it will be built."
+        },
+        {
+          "id": "FIB-E-07",
+          "difficulty": "easy",
+          "topic": "Functional Requirements Definition",
+          "question": "Functional requirements describe the __________ or system services the software must provide.",
+          "answer": "functionality",
+          "explanation": "Functional requirements describe functionality or system services."
+        },
+        {
+          "id": "FIB-E-08",
+          "difficulty": "easy",
+          "topic": "Requirement Characteristics — Consistency",
+          "question": "__________ requirements prevent conflicts and confusion between different parts of the specification.",
+          "answer": "Consistent",
+          "explanation": "Consistency ensures there are no contradictions in the descriptions of system facilities."
+        },
+        {
+          "id": "FIB-E-09",
+          "difficulty": "easy",
+          "topic": "MHC-PMS Report Trigger Time",
+          "question": "According to MHC-PMS system requirement 1.2, the monthly management report shall be automatically generated for printing after __________ on the last working day of the month.",
+          "answer": "17:30",
+          "explanation": "Requirement 1.2 specifies 17:30 as the trigger time for automatic report generation."
+        },
+        {
+          "id": "FIB-M-01",
+          "difficulty": "medium",
+          "topic": "NFR Three Classifications",
+          "question": "Non-functional requirements are classified into three categories: Product requirements, __________ requirements, and External requirements.",
+          "answer": "Organisational",
+          "explanation": "The three NFR classifications are Product, Organisational, and External requirements."
+        },
+        {
+          "id": "FIB-M-02",
+          "difficulty": "medium",
+          "topic": "Domain Requirements Consequence",
+          "question": "If domain requirements are not satisfied, the system may be __________.",
+          "answer": "unworkable",
+          "explanation": "The slides state unsatisfied domain requirements can render the system unworkable."
+        },
+        {
+          "id": "FIB-M-03",
+          "difficulty": "medium",
+          "topic": "Requirements Imprecision",
+          "question": "Ambiguous requirements may be interpreted in different ways by __________ and users, leading to implementation mismatches.",
+          "answer": "developers",
+          "explanation": "The slides warn that ambiguous requirements are interpreted differently by developers versus users."
+        },
+        {
+          "id": "FIB-M-04",
+          "difficulty": "medium",
+          "topic": "Goals Definition",
+          "question": "A __________ is a general intention of the user, such as ease of use, which is helpful to developers as it conveys user intent.",
+          "answer": "goal",
+          "explanation": "Goals convey the intentions of system users to developers, even if they are not precisely testable."
+        },
+        {
+          "id": "FIB-M-05",
+          "difficulty": "medium",
+          "topic": "NFR Metrics — Ease of Use",
+          "question": "For the Ease of Use property, the two metrics listed are training time and number of __________ frames.",
+          "answer": "help",
+          "explanation": "The metrics table lists training time and number of help frames as measures for ease of use."
+        },
+        {
+          "id": "FIB-M-06",
+          "difficulty": "medium",
+          "topic": "MHC-PMS Staff Identification",
+          "question": "In MHC-PMS, each staff member using the system shall be uniquely identified by his or her __________ employee number.",
+          "answer": "8-digit",
+          "explanation": "The functional requirement specifies an 8-digit employee number for unique staff identification."
+        },
+        {
+          "id": "FIB-M-07",
+          "difficulty": "medium",
+          "topic": "Domain Requirements Two Problems",
+          "question": "The two key problems with domain requirements are __________ and implicitness.",
+          "answer": "understandability",
+          "explanation": "Understandability (domain language unfamiliar to engineers) and implicitness (experts assume knowledge is obvious) are the two domain requirement problems."
+        },
+        {
+          "id": "FIB-M-08",
+          "difficulty": "medium",
+          "topic": "Requirement Characteristics — Completeness",
+          "question": "__________ requirements ensure no functionality or system attribute is overlooked in the specification.",
+          "answer": "Complete",
+          "explanation": "Completeness ensures all required functionality and system attributes are captured."
+        },
+        {
+          "id": "FIB-M-09",
+          "difficulty": "medium",
+          "topic": "MHC-PMS External NFR Standard",
+          "question": "The MHC-PMS external non-functional requirement states the system shall implement patient privacy provisions as set out in __________.",
+          "answer": "HStan-03-2006-priv",
+          "explanation": "This is the specific privacy standard cited in the MHC-PMS non-functional requirements example."
+        },
+        {
+          "id": "FIB-M-10",
+          "difficulty": "medium",
+          "topic": "System Requirements as Contract",
+          "question": "System requirements define what should be implemented and may be part of a __________ between client and contractor.",
+          "answer": "contract",
+          "explanation": "System requirements can form part of the formal contract between client and contractor."
+        },
+        {
+          "id": "FIB-H-01",
+          "difficulty": "hard",
+          "topic": "NFR Impact — Architecture",
+          "question": "Non-functional requirements may affect the overall __________ of a system rather than its individual components.",
+          "answer": "architecture",
+          "explanation": "NFRs like performance can require whole-system architectural changes, not just component-level modifications."
+        },
+        {
+          "id": "FIB-H-02",
+          "difficulty": "hard",
+          "topic": "Train Protection Formula",
+          "question": "In the train protection system domain requirement, the deceleration formula is: Dtrain = Dcontrol + __________.",
+          "answer": "Dgradient",
+          "explanation": "The formula from the slides is Dtrain = Dcontrol + Dgradient, where Dgradient accounts for gradient-based deceleration."
+        },
+        {
+          "id": "FIB-H-03",
+          "difficulty": "hard",
+          "topic": "Verifiable NFR Definition",
+          "question": "A verifiable non-functional requirement is a statement using some __________ that can be objectively tested.",
+          "answer": "measure",
+          "explanation": "Verifiable NFRs rely on a concrete measure — unlike goals which are subjective intentions."
+        },
+        {
+          "id": "FIB-H-04",
+          "difficulty": "hard",
+          "topic": "Robustness Metrics — Edge Case",
+          "question": "One of the three metrics for specifying Robustness as a non-functional property is the probability of __________ on failure.",
+          "answer": "data corruption",
+          "explanation": "The three Robustness metrics are: time to restart after failure, percentage of events causing failure, and probability of data corruption on failure."
+        },
+        {
+          "id": "FIB-H-05",
+          "difficulty": "hard",
+          "topic": "MHC-PMS Requirement 1.4 — Dose Units",
+          "question": "According to MHC-PMS system requirement 1.4, if drugs are available in different __________ units, separate reports shall be created for each.",
+          "answer": "dose",
+          "explanation": "Requirement 1.4 specifies that drugs available in different dose units (e.g., 10 mg, 20 mg) each require a separate report."
+        },
+        {
+          "id": "FIB-H-06",
+          "difficulty": "hard",
+          "topic": "Feasibility Characteristic",
+          "question": "__________ requirements align with project constraints, avoiding unrealistic expectations from stakeholders.",
+          "answer": "Feasible",
+          "explanation": "Feasibility ensures requirements can realistically be implemented within the project's technical and budget constraints."
+        }
+      ]
+    }
+  }
+}

@@ -17,6 +17,7 @@ interface GenerateResponse {
         options: string[];
         answer: string;
         explanation?: string;
+        source?: string;
     }>;
 }
 

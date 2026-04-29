@@ -33,7 +33,8 @@ export const createQuizSchema = z.object({
     showLeaderboard: z.boolean(),
     shuffleQuestions: z.boolean(),
     showTeacherNotes: z.boolean(),
-    gameMode: z.enum(['classic', 'team', 'speed'])
+    gameMode: z.enum(['classic', 'team', 'speed']),
+    googleSheetId: z.string().optional()
   }).optional()
 });
 

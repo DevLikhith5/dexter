@@ -245,8 +245,11 @@ export const useQuizStore = create<QuizState>((set, get) => ({
             }
 
             const mcqsPromises = targetGraphIds.map(async (graphId) => {
+                // count is a PATH PARAM — not a query param!
                 const countPerGraph = Math.ceil(formData.questionCount / targetGraphIds.length);
-                const res = await fetch(`${API_BASE_URL}/graph-rag/generate/${graphId}?count=${countPerGraph}&difficulty=${formData.difficulty}&type=${formData.questionType}`, {
+                const url = `${API_BASE_URL}/graph-rag/generate/${graphId}/${countPerGraph}?difficulty=${formData.difficulty}&type=${formData.questionType}`;
+                console.log('[Quiz] Generating:', url);
+                const res = await fetch(url, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -261,20 +264,93 @@ export const useQuizStore = create<QuizState>((set, get) => ({
                 .sort(() => Math.random() - 0.5)
                 .slice(0, formData.questionCount);
 
+            // Helper to clean embedded option markers from text
+            const cleanText = (text: string) => {
+                if (!text) return text;
+                // Remove lines that look like options
+                const lines = text.split('\n').filter(line => {
+                    const stripped = line.trim();
+                    if (!stripped || stripped.length < 3) return true;
+                    // Skip lines starting with A), B), C), D), 1., 2., etc.
+                    const firstChar = stripped[0];
+                    if (('ABCDabcd'.includes(firstChar) || '1234'.includes(firstChar)) && '.)'.includes(stripped[1])) {
+                        return false;
+                    }
+                    return true;
+                });
+                let cleaned = lines.join(' ').trim();
+                // Remove trailing option markers
+                const markers = ['A)', 'B)', 'C)', 'D)', 'A.', 'B.', 'C.', 'D.', '1.', '2.', '3.', '4.', 'Options:', 'Choices:'];
+                for (const m of markers) {
+                    const idx = cleaned.lastIndexOf(m);
+                    if (idx > cleaned.length * 0.6) {
+                        cleaned = cleaned.substring(0, idx).trim();
+                    }
+                }
+                return cleaned;
+            };
+
+            // Helper to strip letter prefixes from options
+            const cleanOption = (opt: string) => {
+                if (!opt) return opt;
+                let cleaned = opt.trim();
+                // Remove leading A), B), C), D), A., B., 1., 2., etc.
+                cleaned = cleaned.replace(/^[A-Da-d][.)]\s*/, '');
+                cleaned = cleaned.replace(/^[1-4][.)]\s*/, '');
+                return cleaned.trim();
+            };
+
+            // Strict answer matching — avoid substring false positives
+            const isAnswerMatch = (optText: string, answer: string): boolean => {
+                const a = optText.toLowerCase().trim();
+                const b = answer.toLowerCase().trim();
+                // Exact match
+                if (a === b) return true;
+                // Only allow "contains" if answer is substantial (> 6 chars) to avoid false matches
+                if (b.length > 8 && a === b) return true;
+                return false;
+            };
+
             const questions: Question[] = allMcqs.map((q: any, i: number) => {
-                const options = q.options.map((opt: string, oid: number) => ({
-                    id: oid + 1,
-                    text: opt,
-                    isCorrect: opt === q.answer
-                })).sort(() => Math.random() - 0.5); // Shuffle options
-                
+                const cleanedQuestion = cleanText(q.question ?? "");
+                const cleanedAnswer = cleanOption(q.answer ?? "");
+
+                const rawOptions = (q.options ?? []).map((opt: string, oid: number) => {
+                    const cleanedOpt = cleanOption(opt);
+                    return {
+                        id: oid + 1,
+                        text: cleanedOpt,
+                        isCorrect: isAnswerMatch(cleanedOpt, cleanedAnswer)
+                    };
+                });
+
+                // Shuffle while preserving correctness
+                const shuffled = [...rawOptions].sort(() => Math.random() - 0.5);
+
+                // Safety net: if no option is marked correct, pick the closest match
+                const hasCorrect = shuffled.some(o => o.isCorrect);
+                if (!hasCorrect && shuffled.length > 0) {
+                    let bestIdx = 0;
+                    let bestScore = 0;
+                    shuffled.forEach((o, idx) => {
+                        const score = o.text.toLowerCase().includes(cleanedAnswer.toLowerCase()) ? 1 :
+                                      cleanedAnswer.toLowerCase().includes(o.text.toLowerCase()) ? 0.5 : 0;
+                        if (score > bestScore) { bestScore = score; bestIdx = idx; }
+                    });
+                    shuffled[bestIdx] = { ...shuffled[bestIdx], isCorrect: true };
+                }
+
+                // Clean ugly "Chunk C_abc123" source label
+                const rawSource: string = q.source ?? "";
+                const displaySource = rawSource.match(/^Chunk C_/i) ? "" : rawSource;
+
                 return {
                     id: i + 1,
-                    text: q.question,
-                    options,
-                    answer: q.answer,
-                    explanation: q.explanation || "Generated via Graph RAG",
-                    source: "Graph Knowledge Base"
+                    text: cleanedQuestion,
+                    options: shuffled,
+                    answer: cleanedAnswer,
+                    explanation: q.explanation ?? "",
+                    source: displaySource,
                 };
             });
 

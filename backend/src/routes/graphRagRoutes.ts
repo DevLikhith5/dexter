@@ -7,7 +7,8 @@ const router = Router();
 // Ingest data
 router.post('/ingest', authenticateToken, ingestData);
 
-// Generate questions
+// Generate questions — count can be a path param or defaults to 10
+router.get('/generate/:graphId/:count', authenticateToken, generateQuestions);
 router.get('/generate/:graphId', authenticateToken, generateQuestions);
 
 // Refine batch

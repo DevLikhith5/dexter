@@ -1,3 +1,4 @@
+from app.services.mcq_pipeline import generate_mcqs_async
 from fastapi import APIRouter, Query
 from app.services.mcq_pipeline import generate_mcqs, refine_questions
 from pydantic import BaseModel
@@ -6,10 +7,12 @@ from typing import List
 router = APIRouter()
 
 @router.get("/generate/{graph_id}/{count}")
-def generate(graph_id: str, count: int = 10, difficulty: str = Query("medium"), type: str = Query("mcq")):
+async def generate(graph_id: str, count: int = 10, difficulty: str = Query("medium"), type: str = Query("mcq")):
     print("GENERATE graph_id:", graph_id, "difficulty:", difficulty, "type:", type)
+    # Call the async version directly
+    mcqs = await generate_mcqs_async(graph_id, count, difficulty, type)
     return {
-        "mcqs": generate_mcqs(graph_id, count, difficulty, type)
+        "mcqs": mcqs
     }
 
 class RefineBatchRequest(BaseModel):
