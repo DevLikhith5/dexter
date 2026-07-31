@@ -1,764 +1,481 @@
-# DEXTER — Complete Interview Prep Guide
+# DEXTER — Master Interview Doc (AI-First Edition)
 
-> Everything you need to explain any aspect of this project in an interview.
-> Read this cover to cover and you can answer any question.
+> This doc is built around what interviewers will actually drill into: **the AI system**.
+> The AI pipeline is 60% of this doc. Full-stack parts are compressed to what you need.
+> Read actively: after each section, close the doc and say the answer out loud.
 
 ---
 
 ## TABLE OF CONTENTS
 
-1. [What is Dexter? (30-second pitch)](#1-what-is-dexter-30-second-pitch)
-2. [High-Level Architecture](#2-high-level-architecture)
-3. [End-to-End Data Flow](#3-end-to-end-data-flow)
-4. [Component Deep-Dives](#4-component-deep-dives)
-   - [4.1 Frontend (web/)](#41-frontend-web)
-   - [4.2 Backend (backend/)](#42-backend-backend)
-   - [4.3 AI Worker (graph_rag/)](#43-ai-worker-graph_rag)
-5. [Database Schema](#5-database-schema)
-6. [Real-Time Multiplayer Quiz System](#6-real-time-multiplayer-quiz-system)
-7. [AI Pipeline — Ingestion & Question Generation](#7-ai-pipeline--ingestion--question-generation)
-8. [Technology Choices — Why Each One](#8-technology-choices--why-each-one)
-9. [Game Modes & Settings](#9-game-modes--settings)
-10. [Authentication & Security](#10-authentication--security)
-11. [Google Sheets Integration](#11-google-sheets-integration)
-12. [Edge Cases & Design Decisions](#12-edge-cases--design-decisions)
-13. [Sample Interview Q&A](#13-sample-interview-qa)
-14. [Known Weaknesses & Future Work](#14-known-weaknesses--future-work)
+1. [The Pitch (memorize both versions)](#1-the-pitch)
+2. [Architecture in 60 Seconds](#2-architecture-in-60-seconds)
+3. [THE AI SYSTEM — Why Graph RAG](#3-the-ai-system--why-graph-rag)
+4. [AI Stage 1: Ingestion (text extraction)](#4-ai-stage-1-ingestion)
+5. [AI Stage 2: Chunking (every decision explained)](#5-ai-stage-2-chunking)
+6. [AI Stage 3: The Knowledge Graph (Neo4j)](#6-ai-stage-3-the-knowledge-graph)
+7. [AI Stage 4: Question Generation Pipeline](#7-ai-stage-4-question-generation-pipeline)
+8. [AI Stage 5: The Validation Gauntlet](#8-ai-stage-5-the-validation-gauntlet)
+9. [AI Stage 6: Concurrency Model (asyncio)](#9-ai-stage-6-concurrency-model)
+10. [The Honest Flaws (volunteer these)](#10-the-honest-flaws)
+11. [Real-Time Multiplayer (compressed)](#11-real-time-multiplayer-compressed)
+12. [Data Layer (compressed)](#12-data-layer-compressed)
+13. [The Master Decision Log](#13-the-master-decision-log)
+14. [Brutal Q&A Bank](#14-brutal-qa-bank)
+15. [Numbers to Memorize](#15-numbers-to-memorize)
+16. [Final Self-Test](#16-final-self-test)
 
 ---
 
-## 1. What is Dexter? (30-second pitch)
+## 1. The Pitch
 
-> **"Dexter is an AI-powered quiz platform for educators. A teacher uploads course materials — PDFs, URLs, or just types a topic — and Dexter automatically ingests the content, generates high-quality MCQs and True/False questions using GPT-4o-mini, stores them in a Neo4j knowledge graph for semantic relationships, and lets the teacher host a live multiplayer quiz session. Students join via QR code from any device, answer in real-time via WebSocket, get instant grading with speed bonuses, and scores auto-sync to Google Sheets."**
+### 30-second version (memorize word-for-word)
 
-**One-liner:** Turn any content into interactive, auto-graded live quizzes.
+> "Dexter is an AI-powered quiz platform for educators. A teacher uploads a PDF, a URL, or just types a topic — and my AI pipeline ingests the content, builds a knowledge graph in Neo4j, and generates validated, difficulty-calibrated quiz questions using GPT-4o-mini. The teacher reviews them, then hosts a live multiplayer session over WebSockets where students join by QR code, answer in real time with Redis-backed scoring, and results auto-sync to Google Sheets."
 
-**Problem it solves:** Teachers spend hours writing quiz questions. Dexter automates question generation and adds live engagement + auto-grading.
+### 2-minute version (when they say "tell me more")
+
+> "The core technical problem is: **LLMs produce bad quiz questions by default** — they hallucinate answers, reference 'the passage', repeat the same concept, and write giveaway distractors. My system solves this in three layers.
+>
+> **Layer 1 — structured knowledge.** Ingested text is chunked with a sliding-window algorithm, tagged with TF-IDF keywords, and stored as a graph in Neo4j where chunks sharing keywords get RELATED_TO edges. Every document is isolated by a UUID graph_id.
+>
+> **Layer 2 — grounded generation.** For each chunk, a question agent writes a question using Bloom's-taxonomy stems matched to the requested difficulty. Then an option agent writes three distractors — but crucially, it sees not just the source chunk, but the *graph neighbors*: other chunks sharing the most keywords. That's what makes distractors plausible instead of random.
+>
+> **Layer 3 — validation.** Every candidate question passes ~10 deterministic gates: answer must be grounded in the chunk text via fuzzy matching, no meta-references, no answer leakage, distractor similarity thresholds, and global dedup using Levenshtein distance so no two questions test the same concept. Failures retry up to 5 times with different strategies.
+>
+> All of this runs concurrently — an asyncio semaphore processes 6 chunks in parallel with an early-stop event, so cost scales with the number of questions requested, not document size."
 
 ---
 
-## 2. High-Level Architecture
+## 2. Architecture in 60 Seconds
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        FRONTEND (web/)                       │
-│              Vite + React 18 + TypeScript + Tailwind         │
-│     Port 3000 (prod) / 5173 (dev) — Serves the SPA          │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ REST (fetch) + WebSocket
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        BACKEND (backend/)                    │
-│            Express 5 + Bun + TypeScript + Drizzle ORM        │
-│                   Port 3000                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │  PostgreSQL   │  │    Redis     │  │  WebSocket   │       │
-│  │  (Drizzle)    │  │  (Sessions)  │  │  (ws)        │       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTP (axios)
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      AI WORKER (graph_rag/)                  │
-│              FastAPI + Python + GPT-4o-mini + Neo4j          │
-│                       Port 8000                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │    Neo4j      │  │   OpenAI     │  │   Tavily     │       │
-│  │  (Graph DB)   │  │  (GPT-4o-mini)│  │  (Web Search)│       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+React/Vite (3000)  ──REST+WS──▶  Express/Bun (3000)  ──HTTP──▶  FastAPI AI Worker (8000)
+                                      │                              │
+                              PostgreSQL (5440)              Neo4j (7687)
+                              Redis (6389)                   OpenAI GPT-4o-mini
+                                                             Tavily Search
 ```
 
-**Infrastructure (Docker Compose):**
-- **PostgreSQL** (port 5440) — persistent data (users, quizzes, questions, attempts)
-- **Redis** (port 6389) — real-time quiz sessions, scores, timers
-- **Neo4j** (ports 7474/7687) — knowledge graph for chunk relationships
+- **Frontend**: Vite + React 18 + TypeScript + Zustand + Tailwind
+- **Backend**: Express 5 on Bun, Drizzle ORM → PostgreSQL, Redis for live sessions, `ws` for WebSockets
+- **AI Worker**: Python FastAPI, LangChain ChatOpenAI, Neo4j graph store
+- **Infra**: docker-compose runs Postgres, Redis, Neo4j; `dev.sh` boots all three services
+
+**If asked "why three services?":** separation of concerns — the Python AI worker scales independently, has its own dependency ecosystem (LangChain, Neo4j driver, PyMuPDF), and its failure never takes down the API or the live game.
 
 ---
 
-## 3. End-to-End Data Flow
+## 3. THE AI SYSTEM — Why Graph RAG
 
-This is the most important thing to explain. Walk through this step by step:
+### The opening framing (use this when they ask "what is RAG?")
 
-### Step 1: Teacher Creates Quiz
-- Teacher fills in title, topic, difficulty, question count on **CreateQuizPage**
-- Uploads PDF files or pastes URLs, or picks from saved library
-- Frontend sends to **Backend** → `POST /api/graph-rag/ingest`
+> "RAG = Retrieval-Augmented Generation. Instead of letting the LLM answer from its training data, you **retrieve** relevant source material and **inject it into the prompt**, so generation is grounded in your content. The standard implementation uses vector embeddings and similarity search. Mine uses a **keyword graph** — same RAG pattern, different retrieval mechanism."
 
-### Step 2: Content Ingestion (AI Worker)
-- Backend proxies to **Python AI Worker** → `POST /api/ingest`
-- Python extracts text:
-  - **URL**: BeautifulSoup scrapes and cleans HTML
-  - **PDF**: PyMuPDF extracts text (with OCR fallback for scanned pages)
-  - **Topic**: Tavily API does web search and returns content
-- Text is **chunked**:
-  - Split into sentences → sliding-window hybrid chunks (window=3, overlap=1)
-  - Short chunks merged (min 60 words)
-  - TF-IDF extracts top 10 important terms per document
-  - Keywords tagged per chunk
-- Stored in **Neo4j**:
-  - `(:Chunk {id, text, graph_id})` nodes
-  - `(:Keyword {name, graph_id})` nodes
-  - `(:Chunk)-[:HAS_KEYWORD]->(:Keyword)` edges
-  - `(:Chunk)-[:RELATED_TO]->(:Chunk)` edges between chunks sharing keywords
-- Returns `graph_id` to backend → saved in PostgreSQL `documents` table
+### Why not vanilla vector RAG?
 
-### Step 3: Question Generation (AI Worker)
-- Backend calls → `GET /api/generate/{graph_id}/{count}?difficulty=medium&type=mcq`
-- Python pipeline runs (see Section 7 for details):
-  - Fetches chunks from Neo4j
-  - Processes 6 chunks concurrently (semaphore)
-  - Each chunk → question_agent writes question → option_agent writes distractors → validation
-  - Stops when requested count reached
-- Returns array of MCQs with question, options, answer, explanation
+| Vector RAG weakness | How the graph solves it |
+|---|---|
+| Finds chunks with similar *wording* | Finds chunks sharing *concepts* via keyword edges — different wording, same idea |
+| Top-k is opaque — you can't explain why a chunk was retrieved | The Cypher query literally counts shared keywords — fully explainable |
+| Embedding API cost on every ingest + a vector DB to run | TF-IDF is free, deterministic, runs in-process; Neo4j already in the stack |
+| Neighbors in embedding space ≠ logical neighbors | `RELATED_TO` edges are explicit relationships you can traverse and filter |
 
-### Step 4: Teacher Reviews
-- Questions displayed on frontend with edit capability
-- **Batch refine**: Teacher types "make harder" → `POST /api/refine-batch` → GPT-4o-mini rewrites all questions
-- Configure settings: timer, game mode, leaderboard, shuffle, Google Sheet ID
-- Quiz saved to PostgreSQL → `POST /api/quizzes`
+**If pushed — "would embeddings be better?":**
+> "For pure retrieval recall, yes — TF-IDF misses synonyms, so 'car' and 'automobile' never link. The honest answer is the best system is hybrid: keyword edges for explainability + embedding edges for semantic recall. That's my next iteration."
 
-### Step 5: Host Live Session
-- Teacher clicks "Host" → `POST /api/gateway/start-multiplayer-session`
-- Backend creates session in **Redis** (sessionId, quizId, hostUserId, settings)
-- Generates **QR code** — students scan to join
-- Students connect via **WebSocket** → `join_quiz` message
+### Why not fine-tuning?
 
-### Step 6: Live Gameplay
-- Host starts quiz → `start_quiz` WebSocket message
-- Questions fetched from PostgreSQL, cached in Redis, delivered one at a time
-- Each question has a **timer** (default 30s, configurable)
-- Players submit answers → `submit_answer` → server evaluates:
-  - Correct: base points + speed bonus (Speed Run mode)
-  - Incorrect: 0 points
-- Scores updated in **Redis** and broadcast to all participants
-- Leaderboard updates in real-time
-
-### Step 7: Auto-Grading & Export
-- Quiz ends → scores persisted to PostgreSQL (`quizAttempts` + `answers`)
-- If Google Sheet ID configured → auto-syncs scores via **Google Sheets API** (OAuth2)
-- Teacher can also manually sync from dashboard
+> "Fine-tuning bakes knowledge into weights — it can't cite source material, it goes stale, and it costs far more than prompt-based grounding. RAG keeps the source of truth in the database, so a teacher's new PDF works instantly with zero training."
 
 ---
 
-## 4. Component Deep-Dives
+## 4. AI Stage 1: Ingestion
 
-### 4.1 Frontend (web/)
+**File:** `graph_rag/app/services/ingest_service.py`, `app/core/loaders.py`, `app/core/tavily.py`
 
-**Stack:** Vite + React 18 + TypeScript + Tailwind CSS + Framer Motion
+Three input types, three extractors — because teachers have materials in every format:
 
-**Key Libraries:**
-- `react-router-dom` — SPA routing
-- `zustand` — state management (quizStore)
-- `framer-motion` — animations
-- `html5-qrcode` — QR code scanning for joining quizzes
-- `qrcode.react` — QR code generation for hosting
-- `@react-oauth/google` — Google OAuth login
-- `three` — 3D shader effects on landing page
-- `sonner` — toast notifications
+| Input | Extractor | Details |
+|---|---|---|
+| `text` | passthrough | raw pasted content |
+| `url` | **BeautifulSoup** | strips `<script>`, `<style>`, `<noscript>` → clean text |
+| `pdf` | **PyMuPDF (fitz)** | per-page text; if a page yields <50 chars → **OCR fallback** via `get_textpage_ocr` (handles scanned lecture slides) |
+| `topic` | **Tavily Search API** | `search_depth: advanced`, 5 results, raw content — turns "Thermodynamics" into source material when the teacher has no document |
 
-**Pages:**
-| Page | Purpose |
-|------|---------|
-| `LandingPage.tsx` | Marketing page — hero, features, pricing, testimonials |
-| `LoginPage.tsx` / `SignupPage.tsx` | Auth (email/password + Google OAuth) |
-| `DashboardPage.tsx` | Quiz library, stats, knowledge base |
-| `CreateQuizPage.tsx` | 4-step wizard: Details → Resources → Questions → Settings |
-| `HostQuizPage.tsx` | Live hosting interface with QR code and leaderboard |
-| `JoinQuizPage.tsx` | Student joins via QR code or session code |
-| `QuizRoomPage.tsx` | Live quiz room — answer questions, see scores |
-| `CalendarPage.tsx` | Schedule/view quizzes |
-
-**State Management (`quizStore.ts` — Zustand):**
-- Manages multi-step quiz creation flow (step 1-4)
-- Stores formData (title, topic, difficulty, questions, settings)
-- Handles ingestion status, question generation, quiz saving
-
-**WebSocket Service (`websocketService.ts`):**
-- `WebSocketManager` class — singleton pattern
-- Auto-reconnect (5 attempts, 3s interval)
-- Event subscription pattern (`subscribe`/`unsubscribe`)
-- Methods: `joinQuiz`, `submitAnswer`, `startQuiz`, `nextQuestion`, `leaveQuiz`
-
-**API Services (layered architecture):**
-```
-services/
-├── api/
-│   ├── auth/authService.ts      — login, signup, Google OAuth, token refresh
-│   ├── quiz/quizService.ts      — CRUD quizzes, get results
-│   ├── answer/answerService.ts  — submit answers
-│   ├── document/documentService.ts — upload/process documents
-│   ├── gateway/gatewayService.ts — createQuizWithAI, startMultiplayer
-│   ├── ai/aiService.ts          — AI-related calls
-│   ├── utils/requestHandler.ts  — fetch wrapper with auth headers
-│   ├── utils/errorHandler.ts    — centralized error handling
-│   └── utils/responseHandler.ts — response normalization
-├── websocketService.ts          — WebSocket manager
-└── authService.ts               — legacy auth (being phased out)
-```
-
-**Custom Hooks:**
-- `useQuiz.ts` — fetch/create quizzes
-- `useAuth.ts` — authentication state
-- `useDocument.ts` — file upload
-- `useAnswer.ts` — answer submission
-- `useWebSocket.ts` — WebSocket connection
+**Decisions to name-drop:**
+- BeautifulSoup tag decomposition before text extraction → no JavaScript garbage in chunks
+- OCR fallback threshold (<50 chars/page) → scanned PDFs still work
+- Tavily instead of Google scraping → purpose-built for AI consumption, returns clean content, no rate-limit fights
 
 ---
 
-### 4.2 Backend (backend/)
+## 5. AI Stage 2: Chunking
 
-**Stack:** Express 5 + Bun + TypeScript + Drizzle ORM + PostgreSQL + Redis
+**File:** `graph_rag/app/services/chunking.py`
 
-**Entry Point (`src/index.ts`):**
-- Creates Express app + HTTP server
-- Mounts routes: `/api/users`, `/api/auth`, `/api/quizzes`, `/api/answers`, `/api/gateway`, `/api/documents`, `/api/graph-rag`, `/api/stats`
-- Sets up WebSocket server on same HTTP server
-- CORS configured for frontend origins
+This is deterministic, classic NLP — no LLM involved. Walk them through the 4 steps:
 
-**Database Layer:**
-- `src/db/index.ts` — PostgreSQL connection pool via `pg` driver
-- `src/db/schema.ts` — Drizzle ORM schema definitions
-- `drizzle.config.ts` — migration configuration
-- `drizzle/` — generated migrations (6 snapshots)
+### Step 1 — Structural split
+Split text into paragraphs, then sentences via regex on `.!?`.
+**Why sentence-level?** Chunk boundaries at sentence ends → no half-thoughts fed to the LLM.
 
-**Services:**
+### Step 2 — Hybrid sliding window
+`window=3 sentences, overlap=1` → step size 2.
+**Why overlap?** A definition in sentence 3 often needs its example in sentence 4. Hard cuts split concept from context; overlap=1 guarantees every sentence appears with its neighbors somewhere.
 
-| Service | Purpose |
-|---------|---------|
-| `GraphRagService.ts` | Proxies to Python AI worker (ingest, generate, refine) |
-| `RedisQuizService.ts` | Real-time session management (scores, players, teams, settings) |
-| `QuizService.ts` | CRUD for quizzes and questions (PostgreSQL) |
-| `QuizAttemptService.ts` | Tracks attempts, answer submissions, score calculation |
-| `GoogleSheetsService.ts` | OAuth2 + Google Sheets API export |
-| `APIGatewayService.ts` | Orchestrates AI pipeline: ingest → generate → create quiz |
-| `AIWorkerService.ts` | Legacy (partially disabled) |
+### Step 3 — Merge short chunks
+Any chunk **< 60 words** merges with the next one.
+**Why?** The question agent needs enough material to write a non-trivial question. A 20-word chunk produces "What is X?" trivia at best.
 
-**Controllers:**
-| Controller | Routes Handled |
-|-----------|---------------|
-| `authController.ts` | Login, signup, Google OAuth callback |
-| `quizController.ts` | CRUD quizzes, get results, sync to sheets |
-| `graphRagController.ts` | Ingest, generate, refine, get stored graphs |
-| `apiGatewayController.ts` | createQuizWithAI, startMultiplayerSession |
-| `answerController.ts` | Answer submission |
-| `statsController.ts` | Dashboard stats |
-| `userController.ts` | User profile management |
+### Step 4 — Validation filter
+A chunk is kept if:
+- **≥ 40 words** (auto-accept — enough substance), OR
+- **≥ 2 TF-IDF term hits** AND **stopword ratio < 0.4**
 
-**Middleware:**
-- `auth.ts` — JWT verification (`authenticateToken`) — extracts `userId` from Bearer token
+**Why?** This kills junk chunks — headers, footers, "References", page numbers — that would otherwise waste LLM calls. A chunk dense in document-salient terms with few stopwords is real content.
 
-**Utils:**
-- `password.ts` — bcrypt hashing/compare
-- `jwt.ts` — JWT sign/verify
+### TF-IDF keyword extraction
+- `TfidfVectorizer(stop_words="english", max_features=10)` fit on the **full document** → the document's 10 most salient terms
+- Per chunk: keep words (≥3 chars) that appear in that vocabulary → those become the chunk's `keywords`
+
+**Why TF-IDF and not the LLM for keywords?** Free, instant, deterministic, no API cost — and you only need *salient terms* for graph edges, not semantic understanding.
+
+**Output:** `{id: "C_<8 hex>", text, keywords[]}` per chunk.
 
 ---
 
-### 4.3 AI Worker (graph_rag/)
+## 6. AI Stage 3: The Knowledge Graph
 
-**Stack:** FastAPI + Python + LangChain + OpenAI (GPT-4o-mini) + Neo4j + Tavily
+**File:** `graph_rag/app/services/graph_store.py`, `app/main.py` (constraints)
 
-**Entry Point (`app/main.py`):**
-- FastAPI app with CORS
-- Startup: creates Neo4j constraints (unique keyword per graph)
-- Routes: `/api/ingest`, `/api/generate/{graph_id}/{count}`, `/api/refine-batch`, `/ping`
-
-**Core Modules:**
-
-| Module | Purpose |
-|--------|---------|
-| `core/neo4j.py` | Neo4j driver singleton (env vars: NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD) |
-| `core/llm.py` | ChatOpenAI instances (sync + async) — gpt-4o-mini, temperature=0.3 |
-| `core/loaders.py` | Text extraction: URL (BeautifulSoup), PDF (PyMuPDF + OCR fallback) |
-| `core/tavily.py` | Web search via Tavily API (for "topic" input type) |
-
-**Services:**
-
-| Service | Purpose |
-|---------|---------|
-| `ingest_service.py` | Routes input to correct text extractor |
-| `chunking.py` | Sliding-window chunking + TF-IDF keywords + validation |
-| `graph_store.py` | Stores chunks/keywords in Neo4j, creates RELATED_TO edges |
-| `mcq_pipeline.py` | Multi-step LLM question generation pipeline |
-
-**Schemas (Pydantic):**
-- `IngestRequest` — `{input_type: "text"|"url"|"pdf"|"topic", value: str}`
-- `IngestResponse` — `{status: str, chunks: int, graph_id: str}`
-
----
-
-## 5. Database Schema
-
-### PostgreSQL (Drizzle ORM)
-
-```typescript
-// users — authentication and profile
-users: {
-  id: serial PK,
-  username: varchar(50) UNIQUE,
-  email: varchar(100) UNIQUE,
-  password: text (nullable for Google OAuth users),
-  googleId: varchar(255) UNIQUE,
-  avatarUrl: varchar(255),
-  refreshToken: varchar(255),  // Google OAuth refresh token
-  bio: text,
-  createdAt, updatedAt
-}
-
-// documents — knowledge base (ingested sources)
-documents: {
-  id: serial PK,
-  title: varchar(255),
-  sourceValue: text,        // original URL, filename, or topic
-  type: varchar(20),        // 'url' | 'pdf' | 'topic'
-  graphId: varchar(255),    // Neo4j graph ID
-  userId: FK → users.id,
-  createdAt
-}
-
-// quizzes — quiz definitions
-quizzes: {
-  id: serial PK,
-  title: varchar(255),
-  description: text,
-  userId: FK → users.id,
-  graphId: varchar(255),    // link to knowledge graph
-  isActive: boolean,
-  maxParticipants: integer (default 10),
-  settings: jsonb,          // {timer, gameMode, showLeaderboard, shuffleQuestions, showTeacherNotes, googleSheetId}
-  createdAt, updatedAt
-}
-
-// questions — individual questions per quiz
-questions: {
-  id: serial PK,
-  quizId: FK → quizzes.id,
-  content: text,
-  type: 'mcq' | 'tf' | 'short_answer',
-  correctAnswer: text,
-  options: text[],          // MCQ options
-  explanation: text,        // AI explanation
-  source: text,             // source material reference
-  points: integer (default 1),
-  createdAt
-}
-
-// quizAttempts — tracks each user's attempt
-quizAttempts: {
-  id: serial PK,
-  quizId: FK → quizzes.id,
-  userId: FK → users.id,
-  score: integer (nullable until completed),
-  totalScore: integer,
-  completedAt: timestamp (nullable),
-  createdAt
-}
-
-// answers — individual answers per attempt
-answers: {
-  id: serial PK,
-  attemptId: FK → quizAttempts.id,
-  questionId: FK → questions.id,
-  content: text,
-  isCorrect: boolean (nullable until evaluated),
-  pointsAwarded: integer (nullable),
-  answeredAt: timestamp
-}
-```
-
-### Neo4j Graph Model
+### The graph model
 
 ```
-(:Chunk {id: "C_a1b2c3d4", text: "...", graph_id: "uuid"})
-  ├─[:HAS_KEYWORD {graph_id: "uuid"}]→ (:Keyword {name: "entropy", graph_id: "uuid"})
-  └─[:RELATED_TO {graph_id: "uuid"}]→ (:Chunk {id: "C_e5f6g7h8", ...})
-
-Constraints:
-  - (k:Keyword) REQUIRE (k.name, k.graph_id) IS UNIQUE
+(:Chunk {id, text, graph_id}) ──[:HAS_KEYWORD]──▶ (:Keyword {name, graph_id})
+(:Chunk) ──[:RELATED_TO]──▶ (:Chunk)     ← created when two chunks share a keyword
 ```
 
-**Key insight:** `graph_id` isolates each ingested document. Multiple documents can coexist in Neo4j without cross-contamination.
+### The Cypher — be able to write both queries cold
 
-### Redis Keys (Real-Time Sessions)
-
-```
-quiz_session:{sessionId}     — hash: {id, quizId, hostUserId, currentQuestionIndex, participantCount, isActive, startTime, maxPlayers, settings}
-quiz_scores:{sessionId}      — hash: {userId: score}
-quiz_names:{sessionId}       — hash: {userId: userName}
-quiz_players:{sessionId}     — set: {userId, ...}
-quiz_teams:{sessionId}       — hash: {userId: teamName}
-quiz_questions:{sessionId}   — string: JSON array of questions
-```
-
----
-
-## 6. Real-Time Multiplayer Quiz System
-
-### WebSocket Protocol
-
-**Connection:** Client connects to `ws://localhost:3001` (same port as HTTP server)
-
-**Message Types:**
-
-| Type | Direction | Payload | Purpose |
-|------|-----------|---------|---------|
-| `join_quiz` | Client → Server | `{sessionId, userId, userName}` | Join a quiz session |
-| `joined_quiz` | Server → Client | `{sessionId, participantCount, isHost, currentQuestion, settings, team?}` | Confirmation |
-| `start_quiz` | Client → Server | `{sessionId}` | Host starts quiz |
-| `quiz_started` | Server → All | `{sessionId, startTime, totalQuestions}` | Notify all participants |
-| `next_question` | Server → All | `{sessionId, currentQuestionIndex, question, timer}` | Deliver next question |
-| `submit_answer` | Client → Server | `{sessionId, userId, questionId, answer}` | Player submits answer |
-| `answer_submitted` | Server → Client | `{questionId, isCorrect, newScore, explanation?, speedBonus?}` | Evaluation result |
-| `scores_update` | Server → All | `{sessionId, scores, teamScores?}` | Leaderboard update |
-| `participant_joined` | Server → Others | `{userId, participantCount}` | New player joined |
-| `participant_left` | Server → Others | `{userId, participantCount}` | Player left |
-| `leave_quiz` | Client → Server | `{sessionId, userId}` | Player leaves |
-| `quiz_finished` | Server → All | `{sessionId}` | Quiz ended |
-
-### Session Flow
-
-```
-1. Host creates session → Redis stores session data
-2. Students scan QR → connect WebSocket → join_quiz
-3. Server validates session → checks max participants → adds to Redis set
-4. Team mode: auto-assigns to Team A or Team B (whichever has fewer)
-5. Host sends start_quiz → server fetches questions from Postgres
-6. Questions cached in Redis → first question broadcast
-7. Timer starts (default 30s) → auto-advances after timer + 5s buffer
-8. Players submit answers → server evaluates → updates Redis scores
-9. Leaderboard broadcast to all participants
-10. Repeat until all questions done → quiz_finished
-11. Scores persisted to Postgres → Google Sheets sync (if configured)
+**Storage (per chunk):**
+```cypher
+MERGE (c:Chunk {id: $id, graph_id: $graph_id})
+SET c.text = $text
+WITH c
+UNWIND $keywords AS kw
+MERGE (k:Keyword {name: kw, graph_id: $graph_id})
+MERGE (c)-[:HAS_KEYWORD {graph_id: $graph_id}]->(k)
 ```
 
-### Scoring System
-
-- **Base points:** `question.points` (default 10)
-- **Speed Run bonus:** Up to 50% extra based on time remaining
-  - `speedBonus = (timeRemaining / timerDuration) * (basePoints * 0.5)`
-- **Team mode:** Individual scores aggregated into team totals
-
----
-
-## 7. AI Pipeline — Ingestion & Question Generation
-
-### Ingestion Pipeline
-
-```
-Input (text/url/pdf/topic)
-    │
-    ▼
-┌─────────────────┐
-│  Text Extraction │  URL → BeautifulSoup, PDF → PyMuPDF, Topic → Tavily
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│   Chunking       │  Sentences → sliding window (3 sentences, 1 overlap)
-│                  │  Merge short chunks (< 60 words)
-│                  │  Validate: ≥ 40 words OR ≥ 2 TF-IDF hits + < 40% stopwords
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│  Keyword Extract │  TF-IDF top 10 terms per document
-│                  │  Filter words ≥ 3 chars that match important terms
-└────────┬────────┘
-         ▼
-┌─────────────────┐
-│  Neo4j Storage   │  MERGE Chunk nodes, Keyword nodes, HAS_KEYWORD edges
-│                  │  Create RELATED_TO edges between chunks sharing keywords
-└─────────────────┘
+**Relationship building:**
+```cypher
+MATCH (c1:Chunk {graph_id: $gid})-[:HAS_KEYWORD]->(k:Keyword)<-[:HAS_KEYWORD]-(c2:Chunk)
+WHERE c1.id < c2.id
+MERGE (c1)-[:RELATED_TO {graph_id: $gid}]->(c2)
 ```
 
-### Question Generation Pipeline (mcq_pipeline.py)
+### Every decision here is deliberate — know all five:
 
-This is the most technically interesting part — study this:
+1. **`MERGE` not `CREATE`** → idempotent. Re-ingesting or retrying never creates duplicate nodes/edges. Safe by construction.
+2. **Constraint `(keyword.name, keyword.graph_id) IS UNIQUE`** → "entropy" in document A and "entropy" in document B are *different nodes*. Enforced at the DB level on startup.
+3. **`graph_id` = UUID per ingest** → multi-tenancy. Each document is an isolated subgraph. Two teachers' materials can never leak into each other's questions.
+4. **`c1.id < c2.id`** → each pair processed once — no duplicate reciprocal edges.
+5. **`graph_id` stored on edges too** → relationship traversal can filter by graph in the edge pattern, keeping queries clean and correct.
 
-**Step 1: Fetch Chunks**
-- Query Neo4j for all `Chunk` nodes with matching `graph_id`
-- Each chunk has `id` and `text`
+---
 
-**Step 2: Concurrent Processing**
-- `asyncio.Semaphore(6)` — processes 6 chunks concurrently
-- `asyncio.Event` — stops all tasks when `limit` questions reached
+## 7. AI Stage 4: Question Generation Pipeline
 
-**Step 3: Per-Chunk Processing (up to 5 retries)**
+**File:** `graph_rag/app/services/mcq_pipeline.py` — **the most important file in the project.**
 
+### Retrieval first (the "R" in RAG)
+
+For each chunk, the prompt is built from **three context sources**:
+
+1. **The chunk itself** — the primary source
+2. **Sequential neighbors** (window=1) — chunks immediately before/after by index → preserves narrative flow (a concept's setup is often in the previous chunk)
+3. **Keyword-overlap chunks** — the query that justifies the whole graph:
+```cypher
+MATCH (main:Chunk {id: $id})-[:HAS_KEYWORD]->(k:Keyword)<-[:HAS_KEYWORD]-(o:Chunk)
+WHERE main.id <> o.id
+RETURN o.text, COUNT(DISTINCT k) AS score
+ORDER BY score DESC LIMIT 3
 ```
-┌──────────────────┐
-│  question_agent   │  LLM writes question + answer + explanation
-│  (sync LLM call)  │  Difficulty-based stems (Bloom's taxonomy)
-│                   │  Type: MCQ (4 options) or True/False
-└────────┬─────────┘
-         ▼
-┌──────────────────┐
-│  Answer Grounding │  Check answer appears in chunk text (fuzzy match)
-└────────┬─────────┘
-         ▼
-┌──────────────────┐
-│  option_agent     │  LLM generates 3 wrong but plausible distractors
-│  (async LLM call) │  Uses chunk text + overlap texts from Neo4j
-│                   │  3 retry strategies if < 4 options
-└────────┬─────────┘
-         ▼
-┌──────────────────┐
-│  validate_question│  Quality gates:
-│                   │  - No meta-references ("according to the text")
-│                   │  - No option markers (A), B), etc.)
-│                   │  - Answer not revealed in question
-│                   │  - 5-80 words
-│                   │  - Options non-empty, distinct
-│                   │  - Correct answer in options (fuzzy)
-│                   │  - ≥ 3 content words shared with chunk
-│                   │  - Answer grounded in chunk
-│                   │  - No "all/none of the above"
-└────────┬─────────┘
-         ▼
-┌──────────────────┐
-│  Hard difficulty  │  Must contain reasoning words
-│  check            │  (why, how, best, most, critical, trade-off, etc.)
-└────────┬─────────┘
-         ▼
-     ACCEPTED ✅
+> "This finds the 3 chunks sharing the **most keywords** with the source chunk, ranked by shared-keyword count. A chunk defining 'entropy' in section 1 connects to an application in section 5 — that's where good distractors live."
+
+### Agent 1 — question_agent
+
+- Receives: chunk text + up to 2 neighbor texts + difficulty + type
+- **Bloom's-taxonomy stems injected per difficulty:**
+  - *Easy* (recall): "What is…", "Which best defines…"
+  - *Medium* (comprehension): "How does…", "Why does…", "What distinguishes X from…"
+  - *Hard* (analysis): "Under what conditions would…", "What is the trade-off between…", "What would happen if…"
+- **Strict prompt rules** (this is prompt engineering as quality control):
+  - Self-contained — never say "the passage / according to the text"
+  - Answer must be a **1–6 word phrase that explicitly appears in the chunk**
+  - Don't reveal the answer in the question
+  - Must end with `?`, no embedded option letters (A/B/C/D)
+  - Factual accuracy rule: don't invert relationships
+- Output format enforced: `Question: / Answer: / Explanation:` — parsed deterministically, rejected if `Answer:` missing
+- `"mixed"` type randomly picks MCQ or True/False per chunk
+
+**Why short extractive answers?** Two reasons: (1) it prevents the LLM from *inventing* an answer, and (2) it makes auto-grading exact-matchable later.
+
+### Agent 2 — option_agent (distractor generation)
+
+- Async LLM call, **structured JSON output** (`{"distractors": [...]}`), markdown fences stripped defensively
+- Sees: question, correct answer, chunk text, **overlap texts + neighbors**
+- Distractor instructions: common misconceptions, plausible to a novice, grounded in the source, match the answer's grammatical form and length, no giveaway words ("always/never/none")
+- **Length-matching heuristic:** distractors should be within `[answer_words − 1, answer_words + 2]` — because test-savvy students pick the oddly-long or oddly-short option
+
+### Three fallback strategies (know this — it shows resilience engineering)
+
+1. **Primary:** JSON distractors with full context
+2. **Retry:** "Here are the options already chosen, don't repeat them" + source text → line-per-option
+3. **Fallback:** "Name N terms related to X but not the answer" — pure extraction from the chunk
+
+Each candidate still passes `_is_valid_distractor` (see Stage 5) before entering the option set.
+
+### Post-processing per candidate
+
+- `clean_question_text` — strips embedded `A)`/`1.` markers and trailing option lists the LLM sometimes appends
+- `strip_meta_references` — regex-removes ~20 phrases like "according to the passage", re-capitalizes
+- True/False normalization — answer forced to exactly "True" or "False", options = ["True", "False"]
+
+---
+
+## 8. AI Stage 5: The Validation Gauntlet
+
+> **Framing for the interview:** "The LLM proposes, deterministic code disposes. Nothing reaches the teacher without passing ~10 hard gates — I don't trust probabilistic output for an educational product."
+
+### Per-question gates (`validate_question` + pipeline checks)
+
+| # | Gate | Failure it prevents |
+|---|---|---|
+| 1 | **Answer grounding** — normalized substring, all significant words (>3 chars), or bigram must appear in chunk | Hallucinated answers |
+| 2 | **Meta-reference filter** — ~20 banned phrases | "According to the text…" questions useless outside the document |
+| 3 | **No option markers** in question text | "Which of A) … B) …" formatting garbage |
+| 4 | **No answer leakage** — answer (if >12 chars) can't appear in the question | Giveaways |
+| 5 | **Length: 5–80 words** | Trivial or bloated questions |
+| 6 | **Options non-empty, distinct** | Broken MCQs |
+| 7 | **Correct answer ∈ options** (fuzzy: exact/substring either direction) | Unanswerable questions |
+| 8 | **≥3 content words shared with chunk** | Questions drifting off-source |
+| 9 | **No "all/none of the above"** | Lazy question patterns |
+| 10 | **Hard-mode reasoning gate** — must contain a reasoning word (why, how, trade-off, scenario, determines…) | Difficulty labels that lie |
+
+### Per-distractor gates (`_is_valid_distractor`)
+
+- 3–200 chars, no giveaway phrases ("not mentioned", "cannot be determined")
+- **< 0.70 Levenshtein similarity to the answer** (too close = ambiguous)
+- **< 0.80 similarity to every other distractor** (no duplicates)
+- **Not a substring of the answer or vice versa** (catches "Black Box" vs "Black Box Testing")
+- **Word count within range of the answer** (no odd-one-out length giveaway)
+
+### Global dedup (across the whole quiz)
+
+- New question **>0.75 similar** to any accepted question → reject (same question, different words)
+- New answer **>0.85 similar** to any accepted answer → reject (same *concept* tested twice — True/False exempt since answers are just True/False)
+
+> "The answer-level dedup is the subtle one — two differently-worded questions can both test 'What is the capital of France'. Question-text dedup misses that; answer dedup catches it."
+
+### Retry economics
+
+- **Up to 5 attempts per chunk**, each regenerating from scratch
+- Failure at any gate → `continue` → fresh LLM call
+- After 5 failures → chunk skipped, others continue — **graceful degradation, never a hard failure**
+
+---
+
+## 9. AI Stage 6: Concurrency Model
+
+**File:** `generate_mcqs_async` in `mcq_pipeline.py`
+
+### The mental model (say this first)
+
+> "FastAPI runs on an asyncio event loop — one thread doing cooperative multitasking. LLM calls are 95% I/O wait, so async concurrency gives massive parallelism without threads, the GIL, or process overhead."
+
+### FastAPI endpoint semantics (interviewers love this)
+
+```python
+@router.get("/generate/{graph_id}/{count}")
+async def generate(...)          # runs ON the event loop
+
+@router.post("/ingest")
+def ingest(req: IngestRequest)   # FastAPI auto-offloads to a THREADPOOL
 ```
 
-**Step 4: Deduplication**
-- Questions: reject if > 75% similar to existing (Levenshtein)
-- Answers: reject if > 85% similar to existing (prevents testing same concept twice)
+- `async def` → on the loop; must never block it
+- plain `def` → run in a thread pool so blocking work (Neo4j writes, PDF parsing) can't freeze the loop
 
-**Bloom's Taxonomy Difficulty:**
+### The four primitives, and WHY each exists
 
-| Level | Stems | Example |
-|-------|-------|---------|
-| Easy | "What is", "Which defines", "What is the meaning of" | Recall/definition |
-| Medium | "How does", "Why does", "What distinguishes" | Comprehension |
-| Hard | "Under what conditions", "What would happen if", "What is the trade-off" | Analysis/evaluation |
-
-**Distractor Quality Rules:**
-- Must not contain correct answer
-- Must not be > 70% similar to correct answer
-- Must not be > 80% similar to other distractors
-- Must match grammatical style and approximate length
-- No giveaway words ("always", "never", "all", "none")
-- Must be factually grounded in the content
-
-### Batch Refinement (`/api/refine-batch`)
-
-- Teacher provides instruction: "make harder", "focus on edge cases"
-- Each question sent to GPT-4o-mini with instruction
-- Returns refined question, options, correct answer, explanation
-- Preserves original structure (id, isCorrect flags)
-
----
-
-## 8. Technology Choices — Why Each One
-
-| Technology | Why It Was Chosen | Alternative Considered |
-|-----------|-------------------|----------------------|
-| **Neo4j** | Graph relationships enable "overlap texts" — finding semantically connected chunks through shared keywords. Vector DBs only find similar language; graphs find conceptual connections. | Pinecone/Weaviate (vector-only), PostgreSQL (no graph) |
-| **GPT-4o-mini** | Good quality-to-cost ratio. Low temperature (0.3) reduces hallucination for factual quiz questions. | GPT-4 (more expensive, slower), Claude (different API) |
-| **Redis** | In-memory = sub-millisecond reads for real-time leaderboard. Quiz sessions are ephemeral — Redis is perfect. | In-memory Map (doesn't scale), PostgreSQL (too slow for real-time) |
-| **Bun** | Fast all-in-one JS runtime. Faster startup than Node for dev. Compatible with npm packages. | Node.js (slower), Deno (less ecosystem) |
-| **Drizzle ORM** | Lightweight, type-safe, SQL-like syntax. No heavy abstractions. Better DX than Prisma for this scale. | Prisma (heavier), raw SQL (less safe) |
-| **WebSocket** | Real-time bidirectional communication essential for live quizzes. Polling would be too slow. | HTTP polling (latency), SSE (server→client only) |
-| **FastAPI** | Async Python, auto-generated OpenAPI docs, Pydantic validation. Perfect for AI pipeline. | Flask (sync), Django (too heavy) |
-| **Tavily** | Purpose-built for AI search — returns clean, relevant content. Better than raw Google scraping. | Google Custom Search (rate limits), SerpAPI (expensive) |
-| **Vite** | Instant HMR, fast builds. Much faster than Create React App. | CRA (slow), Next.js (overkill for SPA) |
-| **Tailwind CSS** | Utility-first, rapid prototyping, consistent design system. | CSS modules (more boilerplate), styled-components (runtime cost) |
-| **Zustand** | Lightweight state management. Less boilerplate than Redux. Perfect for multi-step form state. | Redux (too heavy), Context API (re-render issues) |
-
----
-
-## 9. Game Modes & Settings
-
-### Game Modes
-
-| Mode | Description | Scoring |
-|------|-------------|---------|
-| **Classic** | Standard quiz — answer questions, get points | Base points per correct answer |
-| **Speed Run** | Faster answers = more points | Base + up to 50% speed bonus |
-| **Team** | Players auto-assigned to Team A/B | Individual scores → team totals |
-
-### Quiz Settings (stored in `settings` JSONB)
-
-```typescript
-{
-  timer: number,              // seconds per question (10-120, default 30)
-  participantLimit: number,   // max players (default 50)
-  showLeaderboard: boolean,   // show scores after each question
-  shuffleQuestions: boolean,  // randomize question order
-  showTeacherNotes: boolean,  // show AI explanations to students
-  gameMode: 'classic' | 'team' | 'speed',
-  googleSheetId: string       // optional — auto-sync scores
-}
+```python
+semaphore    = asyncio.Semaphore(6)   # max 6 chunks in-flight at once
+results      = []                     # shared mutable state
+results_lock = asyncio.Lock()         # guards it
+done_event   = asyncio.Event()        # broadcast early-stop
 ```
 
----
+**Semaphore(6)** — each in-flight chunk makes 2+ OpenAI calls. 6 concurrent chunks ≈ 12+ parallel API calls — high throughput without tripping rate limits or spiking cost. 7th chunk waits at `async with semaphore:` until a slot frees.
 
-## 10. Authentication & Security
+**done_event** — the cost-saver. Need 10 questions from a 50-chunk document? Once `len(results) >= limit`, one task sets the event; every other task checks `if done_event.is_set(): return` **before** spending LLM tokens. **Cost scales with questions requested, not document size.**
 
-### Auth Flow
+**results_lock** — the trap question. *"asyncio is single-threaded, why a lock?"*
+> "Single-threaded ≠ race-free. Between `if len(results) < limit` and `results.append(...)`, there's an await boundary — the coroutine yields, another runs, sees the same length, and also appends. Now 11 results for a limit of 10. The lock makes check-and-append atomic across coroutines."
 
-1. **Email/Password:**
-   - Signup: `bcrypt.hash(password)` → store in `users.password`
-   - Login: `bcrypt.compare()` → return JWT
-2. **Google OAuth:**
-   - Frontend: `@react-oauth/google` → Google login popup
-   - Backend: exchange code for tokens → store `refreshToken` in `users.refreshToken`
-   - `password` field is nullable for OAuth users
+**`asyncio.gather(*tasks, return_exceptions=True)`** — all chunk tasks launch concurrently; one chunk's exception (timeout, bad JSON) comes back as a result object instead of killing the whole batch.
 
-### JWT
+### Throughput & scaling answers
 
-- Signed with secret key, contains `{userId}`
-- Sent as `Authorization: Bearer <token>` header
-- Verified by `authenticateToken` middleware
-- Extracts `userId` → attaches to `req.userId`
-
-### Security Measures
-
-- **bcrypt** for password hashing (cost factor 10+)
-- **JWT** with expiration
-- **CORS** restricted to frontend origins
-- **Zod** validation on all API inputs
-- **SQL injection** prevented by Drizzle ORM parameterized queries
-- **Google OAuth** refresh tokens stored securely
+- **What limits throughput?** OpenAI rate limits → semaphore=6 → Neo4j connection pool.
+- **Scale beyond one process?** Multiple uvicorn workers behind a load balancer; heavy generation jobs → task queue (Celery/Redis) with job IDs and polling/webhook completion.
+- **Why not threads?** GIL + context-switch overhead; for I/O-bound work asyncio gives thousands of lightweight coroutines vs dozens of heavy threads.
 
 ---
 
-## 11. Google Sheets Integration
+## 10. The Honest Flaws (volunteer these — interview gold)
 
-### Flow
+### Flaw 1: sync LLM call inside the async pipeline
 
-1. Teacher authenticates with Google (OAuth2) → `refreshToken` stored in `users.refreshToken`
-2. Teacher provides Google Sheet ID in quiz settings
-3. On quiz finish (or manual sync):
-   - Backend retrieves host's `refreshToken`
-   - Creates OAuth2 client → refreshes access token
-   - Calls Google Sheets API:
-     - Verifies sheet access
-     - Checks if headers exist (adds if not)
-     - Appends score rows: `[timestamp, quizName, sessionId, userId, userName, score]`
+```python
+# question_agent:
+resp = llm.invoke(prompt)              # BLOCKS the event loop ❌
+# option_agent:
+raw = await llm_async.ainvoke(prompt)  # properly async ✅
+```
 
-### Error Handling
+> "The question agent uses LangChain's synchronous client, so while it waits on OpenAI, the entire event loop stalls — other chunks can't progress during that window. The option agent correctly uses `ainvoke`. The system still works because the semaphore caps concurrent blocking at 6, but true pipelining requires migrating the question agent to async. That's my first fix."
 
-- No refresh token → "Please authenticate with Google"
-- Expired token → "Please re-authenticate"
-- Sheet not found (404) → "Check the Sheet ID"
-- Access denied (403) → "Check the Google Sheets permission box"
+### Flaw 2: TF-IDF misses synonyms
 
----
+> "'Car' and 'automobile' never share a keyword edge, so some conceptual links are missed. The upgrade is hybrid retrieval: keep keyword edges for explainability, add embedding-cosine edges for semantic recall."
 
-## 12. Edge Cases & Design Decisions
+### Flaw 3: no generation caching
 
-### AI Pipeline Edge Cases
-
-| Edge Case | How It's Handled |
-|-----------|-----------------|
-| LLM returns garbage | Up to 5 retries per chunk |
-| Not enough distractors | 3 retry strategies: more context → related terms → fallback |
-| Answer not in chunk | Fuzzy matching (substring, all significant words, bigrams) |
-| Duplicate questions | Levenshtein similarity > 75% rejected |
-| Same concept tested twice | Answer similarity > 85% rejected |
-| Meta-references | Filtered: "according to the passage", "the text says" |
-| Question reveals answer | Rejected if correct answer appears in question text |
-| Too short/long questions | Rejected: < 5 words or > 80 words |
-
-### Real-Time Edge Cases
-
-| Edge Case | How It's Handled |
-|-----------|-----------------|
-| Player joins mid-quiz | Receives current question + remaining time |
-| WebSocket disconnects | Auto-reconnect (5 attempts, 3s interval) |
-| Session full | Rejected with "Maximum participants reached" |
-| Duplicate answer submission | Deduplicated by `{userId}:{questionId}` key |
-| Host disconnects | Session persists in Redis, other players continue |
-| Timer expires | Auto-advances to next question after 5s buffer |
-
-### Data Consistency
-
-- **PostgreSQL** = source of truth (persistent)
-- **Redis** = real-time state (ephemeral)
-- **Neo4j** = knowledge graph (isolated per graph_id)
-- Scores: Redis (real-time) → PostgreSQL (persisted on quiz end)
+> "Regenerating questions for the same graph_id re-pays the API cost. A question bank keyed by (graph_id, difficulty, type) would make regeneration free."
 
 ---
 
-## 13. Sample Interview Q&A
+## 11. Real-Time Multiplayer (compressed)
 
-### "What does this project do?"
+> You know full-stack — just keep these talking points sharp.
 
-> "Dexter is an AI-powered quiz platform. Teachers upload course materials — PDFs, URLs, or topics — and our AI automatically generates quiz questions using GPT-4o-mini. The questions are stored in a Neo4j knowledge graph for semantic relationships. Teachers host live multiplayer quiz sessions where students join via QR code, answer in real-time via WebSocket, get instant grading, and scores auto-sync to Google Sheets."
-
-### "Walk me through the architecture."
-
-> "Three-tier architecture. Frontend is Vite + React 18 + TypeScript with Tailwind — it handles the UI, quiz creation wizard, and WebSocket connections. Backend is Express 5 with Bun runtime — it handles REST APIs, PostgreSQL via Drizzle ORM for persistence, Redis for real-time session state, and WebSocket for live gameplay. The AI worker is FastAPI + Python — it handles content ingestion from URLs/PDFs/topics, chunks text, stores it in Neo4j, and generates questions using a multi-step LLM pipeline with GPT-4o-mini."
-
-### "Why did you use a graph database?"
-
-> "Simple vector similarity only finds chunks that use similar language. Neo4j's graph lets us find semantically connected chunks through shared keywords. When generating distractors, we pull 'overlap texts' — chunks that share keywords with the source chunk — which gives us better context for creating plausible wrong answers. Each document is isolated by `graph_id` so multiple documents don't cross-contaminate."
-
-### "How does the AI generate questions?"
-
-> "It's a multi-step LLM pipeline. First, `question_agent` writes the question stem using difficulty-appropriate Bloom's taxonomy stems — 'What is' for easy, 'Why does' for medium, 'Under what conditions' for hard. Then `option_agent` generates 3 wrong but plausible distractors using the chunk text plus overlapping chunks from Neo4j. Each question goes through validation — we check the answer is grounded in the chunk, no meta-references like 'according to the text', no duplicate concepts, and the question isn't too similar to existing ones. We process 6 chunks concurrently with an asyncio semaphore and stop when we reach the requested count."
-
-### "How does the live quiz work?"
-
-> "When a host clicks start, we create a session in Redis with quiz metadata. The frontend connects via WebSocket. Questions are fetched from PostgreSQL, cached in Redis, and delivered one at a time with a configurable timer. Players submit answers which are evaluated server-side — for Speed Run mode, we calculate time-based bonus points up to 50% extra. Scores update in Redis and are broadcast to all participants in real-time. When the quiz ends, scores are persisted to PostgreSQL and auto-synced to Google Sheets via OAuth2."
-
-### "What was the hardest technical challenge?"
-
-> "The question generation quality. Getting LLMs to consistently produce good quiz questions is hard — they hallucinate, use meta-references like 'according to the passage', or produce duplicate concepts. We solved this with a multi-layer validation pipeline: answer grounding checks, meta-reference filtering, Levenshtein deduplication, distractor quality rules, and difficulty-appropriate Bloom's stems. We also implemented concurrent processing with early stopping to keep latency low."
-
-### "How do you handle scale?"
-
-> "Backend runs on Bun which is fast. The AI worker uses async Python with semaphore concurrency. Redis handles real-time state in-memory. PostgreSQL is indexed on foreign keys. The WebSocket server uses the same HTTP server, so we don't need a separate port. For horizontal scaling, we'd add Redis clustering and load balance the WebSocket connections with sticky sessions."
-
-### "What would you improve?"
-
-> "Support for multiple LLM providers (Claude, Gemini), more comprehensive test coverage, production deployment configs, rate limiting on AI endpoints, caching of generated questions, and better error recovery in the WebSocket layer."
+- **Session creation:** `POST /api/gateway/start-multiplayer-session` → session hash in Redis (`quiz_session:{id}`) with quizId, host, settings, maxPlayers
+- **Join:** QR code → WebSocket `join_quiz` → validated against Redis, max-player check, auto team-assignment (Team A/B balancing) in team mode
+- **Start:** questions loaded from Postgres → cached in Redis (`quiz_questions:{id}`) → broadcast one at a time with a server-side timer (auto-advance at timer+5s)
+- **Answers:** deduped by `userId:questionId`, evaluated server-side, **speed bonus = up to +50% scaled by time remaining** (speed mode), scores via `HINCRBY` in Redis → leaderboard broadcast
+- **Finish:** scores persisted to Postgres (`quizAttempts`, `answers`) → Google Sheets sync via host's OAuth2 refresh token
+- **Late joiners:** receive current question + computed remaining time
+- **Why Redis?** Ephemeral, sub-millisecond, purpose-built data structures (hashes/sets) — Postgres would be a bottleneck for per-answer leaderboard updates.
 
 ---
 
-## 14. Known Weaknesses & Future Work
+## 12. Data Layer (compressed)
 
-### Current Limitations
+**PostgreSQL (Drizzle ORM)** — the source of truth:
+`users` (auth, googleId, refreshToken) · `documents` (title, type, **graphId** — the Postgres↔Neo4j bridge) · `quizzes` (settings as JSONB: timer, gameMode, googleSheetId…) · `questions` (content, type, options[], correctAnswer, explanation) · `quizAttempts` · `answers`
 
-- **Single LLM provider** — hardcoded to OpenAI GPT-4o-mini
-- **No question caching** — regenerating same content costs API calls
-- **Limited test coverage** — only a few test files exist
-- **Local-focused configs** — environment variables assume localhost
-- **No rate limiting** — AI endpoints could be abused
-- **No horizontal scaling** — WebSocket sessions are in-memory per server
-- **Legacy code** — some AI worker endpoints are disabled/commented out
+**Redis** — live session state:
+`quiz_session:{id}` hash · `quiz_scores:{id}` hash · `quiz_players:{id}` set · `quiz_names:{id}` · `quiz_teams:{id}` · `quiz_questions:{id}` JSON
 
-### Future Improvements
+**Neo4j** — knowledge graph: Chunk/Keyword nodes, HAS_KEYWORD + RELATED_TO edges, all scoped by graph_id.
 
-- **Multi-LLM support** — Claude, Gemini, local models
-- **Question bank** — cache generated questions per graph_id
-- **Comprehensive tests** — unit + integration + E2E
-- **Production deployment** — Docker, CI/CD, monitoring
-- **Rate limiting** — per-user API quotas
-- **Horizontal scaling** — Redis pub/sub for cross-server WebSocket broadcast
-- **Question difficulty auto-calibration** — based on student performance data
-- **Mobile app** — React Native or PWA
+**Auth:** bcrypt passwords + JWT (`authenticateToken` middleware) + Google OAuth (refresh token stored for Sheets API).
 
 ---
 
-## Quick Reference Card
+## 13. The Master Decision Log
 
-| Question | Answer |
-|----------|--------|
-| **What is it?** | AI-powered quiz platform for educators |
-| **Frontend?** | Vite + React 18 + TypeScript + Tailwind |
-| **Backend?** | Express 5 + Bun + PostgreSQL (Drizzle) + Redis |
-| **AI Worker?** | FastAPI + Python + GPT-4o-mini + Neo4j |
-| **Database?** | PostgreSQL (persistent) + Redis (sessions) + Neo4j (knowledge graph) |
-| **Real-time?** | WebSocket (ws library) |
-| **LLM?** | GPT-4o-mini, temperature 0.3 |
-| **Auth?** | JWT + bcrypt + Google OAuth |
-| **Export?** | Google Sheets API (OAuth2) |
-| **Dev startup?** | `docker-compose up -d` → `dev.sh` |
-| **Ports?** | Frontend 3000/5173, Backend 3000, AI Worker 8000, Postgres 5440, Redis 6389, Neo4j 7474/7687 |
+| Decision | Why |
+|---|---|
+| Graph RAG over vector RAG | Concept links via keywords, explainable retrieval, no embedding API cost |
+| MERGE everywhere in Cypher | Idempotent retries — no duplicates by construction |
+| graph_id UUID per ingest | Multi-tenant isolation of every document |
+| TF-IDF keywords | Free, deterministic, salient — good enough for graph edges |
+| Sliding-window chunking (3/1) | No sentence cut off from its context |
+| Merge <60-word chunks | LLM needs substance to write non-trivial questions |
+| Chunk validation (40w / TF-IDF hits / stopword ratio) | Kills headers/footers/junk before they cost LLM calls |
+| GPT-4o-mini, temp 0.3 | Factual task — minimize hallucination per dollar |
+| Bloom's stems per difficulty | Difficulty is a real spectrum, not a label |
+| Extractive 1–6 word answers | Prevents invented answers + exact-matchable grading |
+| 3 context sources (chunk + neighbors + overlap) | Plausible distractors need related-but-wrong material |
+| 3 distractor fallback strategies | LLMs fail differently each retry — change the ask |
+| ~10 deterministic validation gates | Never trust probabilistic output in an education product |
+| Answer-level Levenshtein dedup (0.85) | Catches same-concept-different-wording duplicates |
+| Semaphore(6) | Throughput vs OpenAI rate limits |
+| done_event early-stop | Cost scales with questions requested, not doc size |
+| asyncio.Lock on shared results | Check-then-append race exists across coroutines |
+| gather(return_exceptions=True) | One bad chunk never kills the batch |
+| Redis for live sessions | Ephemeral + sub-ms reads; Postgres is the permanent record |
+| FastAPI for the AI worker | Native async + Pydantic validation + auto OpenAPI docs |
 
 ---
 
-*Generated from codebase analysis. Read this before your interview and you can answer any question about Dexter.*
+## 14. Brutal Q&A Bank
+
+**"Is this really RAG? You don't use embeddings."**
+> "RAG is a pattern — retrieve relevant context, augment the prompt, generate grounded output. My retrieval mechanism is graph traversal over keyword relationships instead of vector similarity, but the pattern is identical: the LLM never generates from parametric memory alone, every question is grounded in retrieved source text. Embeddings are a valid upgrade for the retrieval layer, not a different architecture."
+
+**"How do you know generated answers are correct?"**
+> "Three layers: the prompt requires an extractive 1–6 word answer from the chunk; the grounding gate verifies the answer actually appears in the chunk via fuzzy matching; and the question must share at least 3 content words with the chunk. It can't guarantee truth, but it guarantees every answer is *verifiable against the source*."
+
+**"What stops duplicate questions?"**
+> "Two-level Levenshtein dedup: >0.75 question similarity rejects reworded duplicates; >0.85 answer similarity rejects the same concept tested differently. True/False is exempt from answer dedup since all T/F answers are identical."
+
+**"Walk me through what happens when 50 chunks need to become 10 questions."**
+> "All 50 become asyncio tasks, the semaphore admits 6 at a time. Each runs the agent pipeline with up to 5 attempts. As results pass validation and dedup, they're appended under the results lock. The moment the 10th lands, done_event fires and every remaining task exits before its next LLM call — so a 50-chunk document costs roughly 10 questions' worth of tokens, not 50."
+
+**"Why a lock in single-threaded asyncio?"**
+> "Because coroutines interleave at await points. Check-then-act on shared state — read length, then append — spans an await, so two coroutines can both pass the check. The lock serializes the critical section."
+
+**"Single point of failure analysis?"**
+> "AI worker down → ingestion/generation fails, but auth, quizzes, and live sessions keep running. Redis down → no live sessions, but CRUD works. Postgres down → read-only degradation. Neo4j down → only the AI pipeline fails. The blast radius of each component is isolated by design."
+
+**"Latency of generating 10 questions?"**
+> "Bounded by the slowest of ~2 semaphore rounds of chunk processing — each chunk is 2 sequential LLM calls minimum, up to 5 attempts worst case. The early-stop event means we never wait for the full document."
+
+**"How would you add a new question type, say fill-in-the-blank?"**
+> "Add a stem set and type instruction in the question agent, a branch in post-processing (blank marker replacing the answer in the question text), reuse the same grounding and dedup gates, and extend the type enum in the Postgres schema and Zod validator. The pipeline's gate architecture means new types inherit all existing quality controls."
+
+---
+
+## 15. Numbers to Memorize
+
+| Number | What |
+|---|---|
+| **6** | Semaphore — max concurrent chunks |
+| **5** | Max attempts per chunk |
+| **3** | Sentences per chunk (window) |
+| **1** | Sentence overlap between chunks |
+| **60** | Words — below this, chunks merge |
+| **40** | Words — at/above this, chunk auto-accepted |
+| **10** | TF-IDF top terms per document |
+| **0.3** | LLM temperature |
+| **0.75** | Question dedup similarity threshold |
+| **0.85** | Answer dedup threshold |
+| **0.70 / 0.80** | Distractor similarity limits (vs answer / vs each other) |
+| **3** | Keyword-overlap chunks fetched (LIMIT 3) |
+| **5–80** | Allowed question word count |
+| **1–6** | Ideal answer word count |
+| **8000 / 3000 / 5173** | Ports: AI worker / backend / frontend dev |
+| **5440 / 6389 / 7687** | Ports: Postgres / Redis / Neo4j bolt |
+
+---
+
+## 16. Final Self-Test
+
+Say each answer out loud, no notes. Any stumble → re-read that section only.
+
+1. The 30-second pitch.
+2. End-to-end flow: PDF upload → graded quiz, every service touched.
+3. Why graph over vector RAG — three reasons.
+4. Write the keyword-overlap Cypher query from memory and explain what it returns.
+5. Name 6 of the 10 validation gates and what each prevents.
+6. Explain the answer-level dedup and why question-level dedup isn't enough.
+7. Explain semaphore + done_event + results_lock — and the trap answer for the lock.
+8. Volunteer both flaws: sync question agent, TF-IDF synonym blindness — with fixes.
+9. "Scale the generation pipeline 10x" → workers + task queue + question-bank caching.
+10. "Hardest bug you fixed?" → have one concrete story ready (validation loop, dedup race, or WebSocket session sync).
+
+**If you pass all 10 — walk in and take the job.** 💪
